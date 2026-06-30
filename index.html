@@ -1,0 +1,2323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2f5b74">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Saltmere">
+<title>Saltmere</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root{
+  --ink:#161a2c;
+  --ink-soft:#262b45;
+  --driftwood:#8a7459;
+  --driftwood-dark:#5e4f3c;
+  --panel:#e4dec9;
+  --panel-edge:#cdc2a4;
+  --tideglass:#3f93b8;
+  --ember:#f2b341;
+  --ember-dim:#caa05a;
+  --rust:#a8503a;
+  --text-main:#241f17;
+  --text-dim:#5a5142;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--ink);color:var(--text-main);font-family:'Public Sans',-apple-system,'Segoe UI',sans-serif;}
+.hidden{display:none !important;}
+h1,h2,h3,.serif{font-family:'Fraunces',Georgia,serif;}
+.mono{font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;}
+
+/* ---------- noise / grain filter ---------- */
+.grain{position:fixed;inset:0;pointer-events:none;opacity:0.05;mix-blend-mode:overlay;z-index:999;}
+
+/* ---------- intro ---------- */
+#intro-screen{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;
+  background:radial-gradient(ellipse at 50% 20%, #2a3358 0%, #11142a 55%, #0a0c1a 100%);
+  text-align:center;padding:32px 20px;
+}
+#intro-screen h1{
+  color:var(--ember);font-size:clamp(2.6rem,9vw,4.2rem);font-weight:500;letter-spacing:0.08em;
+  text-transform:uppercase;margin:0 0 6px;text-shadow:0 0 28px rgba(242,179,65,0.35);
+}
+#intro-tagline{color:#cfd3e6;font-size:0.98rem;max-width:420px;line-height:1.6;margin:10px 0 34px;font-style:italic;}
+#enter-btn{
+  font-family:'Fraunces',serif;font-size:1.05rem;letter-spacing:0.04em;color:var(--ink);
+  background:linear-gradient(180deg,#f6cf7d,var(--ember-dim));border:none;border-radius:3px;
+  padding:13px 30px;cursor:pointer;box-shadow:0 3px 0 #7c5a22, 0 8px 18px rgba(0,0,0,0.4);
+  transition:transform .15s ease;
+}
+#enter-btn:hover{transform:translateY(-1px);}
+#enter-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #7c5a22;}
+#intro-sub{color:#6c7396;font-size:0.78rem;margin-top:18px;letter-spacing:0.05em;}
+
+/* ---------- world shell ---------- */
+#world{max-width:760px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+
+#instrument-strip{
+  background:linear-gradient(180deg,#3a3122,#241e15);color:#d8cdae;
+  padding:9px 16px;display:flex;justify-content:space-between;align-items:center;
+  font-size:0.72rem;letter-spacing:0.06em;border-bottom:2px solid #14110b;
+  position:sticky;top:0;z-index:10;
+}
+#instrument-strip .world-name{color:var(--ember);font-family:'Fraunces',serif;font-size:0.92rem;letter-spacing:0.12em;text-transform:uppercase;}
+#instrument-strip .status-bits span{margin-left:12px;}
+
+main{flex:1;padding:14px 14px 24px;}
+
+/* porthole / scene viewport */
+#scene-frame{
+  background:linear-gradient(160deg,#9c8761,#5e4f3c 60%,#3c3122);
+  border-radius:14px;padding:10px;box-shadow:0 10px 26px rgba(0,0,0,0.45), inset 0 0 0 1px #2c2418;
+}
+#scene-wrap{border-radius:8px;overflow:hidden;box-shadow:inset 0 0 24px rgba(0,0,0,0.5);background:#0c0e1c;position:relative;}
+#scene-svg{display:block;width:100%;height:auto;}
+#location-badge{
+  position:absolute;top:8px;left:10px;color:#f2ead2;font-family:'Fraunces',serif;font-size:0.95rem;
+  letter-spacing:0.05em;text-shadow:0 1px 6px rgba(0,0,0,0.8);
+}
+
+/* tide ribbon - the signature element, always present */
+#tide-ribbon{
+  margin-top:6px;height:30px;border-radius:6px;position:relative;overflow:hidden;
+  background:#241e15;box-shadow:inset 0 0 0 1px #14110b;
+}
+#tide-fill{position:absolute;left:0;bottom:0;width:100%;background:linear-gradient(180deg,#4aa6cc,#1f5a78);transition:height 1.4s ease;}
+#tide-ribbon .tide-label{
+  position:relative;z-index:2;height:100%;display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:0.68rem;letter-spacing:0.08em;color:#f2ead2;text-shadow:0 1px 3px rgba(0,0,0,0.7);
+  text-transform:uppercase;
+}
+
+/* control panel */
+#panel{
+  background:var(--panel);border:1px solid var(--panel-edge);border-top:4px solid var(--driftwood-dark);
+  border-radius:0 0 8px 8px;padding:18px 18px 16px;margin-top:-4px;position:relative;
+}
+#panel::before{
+  content:"";position:absolute;inset:0;border-radius:0 0 8px 8px;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity:0.06;mix-blend-mode:multiply;
+}
+#loc-title{margin:0 0 8px;font-size:1.5rem;color:var(--text-main);font-weight:500;}
+#narrative{font-size:0.96rem;line-height:1.65;color:var(--text-main);margin-bottom:14px;min-height:3.2em;}
+#narrative .who{color:var(--rust);font-weight:600;}
+
+#hotspots{list-style:none;margin:0 0 4px;padding:0;display:flex;flex-direction:column;gap:6px;}
+#hotspots li button{
+  width:100%;text-align:left;background:none;border:none;font-family:'Public Sans',sans-serif;
+  font-size:0.9rem;color:var(--text-main);cursor:pointer;padding:7px 4px;border-bottom:1px dashed #b9ac88;
+  display:flex;align-items:baseline;gap:8px;
+}
+#hotspots li button:hover{color:var(--rust);}
+#hotspots li button .bullet{color:var(--ember-dim);font-weight:700;}
+#hotspots li button:hover .bullet{color:var(--rust);}
+
+/* signpost nav */
+#signpost{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
+.sign-btn{
+  font-family:'Fraunces',serif;font-size:0.82rem;letter-spacing:0.02em;
+  background:linear-gradient(180deg,#7a6347,var(--driftwood-dark));color:#f2ead2;border:none;
+  padding:8px 13px;border-radius:3px;cursor:pointer;box-shadow:0 2px 0 #3a2f20;
+}
+.sign-btn.active{background:linear-gradient(180deg,#f6cf7d,var(--ember-dim));color:var(--ink);box-shadow:0 2px 0 #7c5a22;}
+.sign-btn:disabled{opacity:0.55;cursor:default;}
+.sign-btn small{display:block;font-family:'JetBrains Mono',monospace;font-size:0.6rem;opacity:0.75;letter-spacing:0;}
+.beam{animation:sweep 7s ease-in-out infinite;}
+@keyframes sweep{0%{transform:rotate(-24deg);}50%{transform:rotate(24deg);}100%{transform:rotate(-24deg);}}
+
+/* ---------- scene life: ambient SVG animation library ---------- */
+.sw-grass{transform-origin:bottom center;animation:swGrass 4.5s ease-in-out infinite;}
+@keyframes swGrass{0%,100%{transform:rotate(-3deg);}50%{transform:rotate(4deg);}}
+.sw-grass-slow{transform-origin:bottom center;animation:swGrass 6.5s ease-in-out infinite;}
+.sw-flower{transform-origin:bottom center;animation:swFlower 5s ease-in-out infinite;}
+@keyframes swFlower{0%,100%{transform:rotate(-2.5deg);}50%{transform:rotate(3deg);}}
+.sw-boat{animation:swBoat 4s ease-in-out infinite;}
+@keyframes swBoat{0%,100%{transform:translateY(0) rotate(-1deg);}50%{transform:translateY(-2.5px) rotate(1.2deg);}}
+.sw-smoke{animation:swSmoke 6s ease-out infinite;}
+@keyframes swSmoke{0%{transform:translate(0,0) scale(0.6);opacity:0;}15%{opacity:0.5;}100%{transform:translate(6px,-30px) scale(1.5);opacity:0;}}
+.sw-gull{animation:swGull 11s ease-in-out infinite;}
+@keyframes swGull{0%{transform:translate(0,0);}25%{transform:translate(22px,-10px);}50%{transform:translate(40px,-2px);}75%{transform:translate(20px,7px);}100%{transform:translate(0,0);}}
+.sw-gull-wing{transform-origin:center;animation:swWing 0.9s ease-in-out infinite;}
+@keyframes swWing{0%,100%{transform:scaleY(1);}50%{transform:scaleY(0.45);}}
+.sw-laundry{transform-origin:top center;animation:swLaundry 3.2s ease-in-out infinite;}
+@keyframes swLaundry{0%,100%{transform:rotate(-6deg) skewX(-3deg);}50%{transform:rotate(7deg) skewX(4deg);}}
+.sw-lantern-flame{animation:swFlame 2.4s ease-in-out infinite;}
+@keyframes swFlame{0%,100%{opacity:0.85;transform:scale(1);}45%{opacity:1;transform:scale(1.08);}60%{opacity:0.7;transform:scale(0.92);}}
+.sw-curtain{transform-origin:top center;animation:swCurtain 5.5s ease-in-out infinite;}
+@keyframes swCurtain{0%,100%{transform:translateX(0) scaleX(1);}50%{transform:translateX(3px) scaleX(1.04);}}
+.sw-shimmer{animation:swShimmer 3.6s ease-in-out infinite;}
+@keyframes swShimmer{0%,100%{opacity:0.12;}50%{opacity:0.32;}}
+.sw-bob{animation:swBobSmall 3.4s ease-in-out infinite;}
+@keyframes swBobSmall{0%,100%{transform:translateY(0);}50%{transform:translateY(-1.6px);}}
+.sw-rope{transform-origin:top center;animation:swRope 5s ease-in-out infinite;}
+@keyframes swRope{0%,100%{transform:rotate(-1.5deg);}50%{transform:rotate(1.8deg);}}
+.sw-raindrop{animation:swRain 0.9s linear infinite;}
+@keyframes swRain{0%{transform:translateY(-8px);opacity:0;}10%{opacity:0.5;}100%{transform:translateY(140px);opacity:0;}}
+.sw-cat-tail{transform-origin:right center;animation:swTail 2.8s ease-in-out infinite;}
+@keyframes swTail{0%,100%{transform:rotate(0deg);}50%{transform:rotate(8deg);}}
+
+.inline-form{margin-top:10px;display:flex;gap:6px;}
+.inline-form input{flex:1;font-family:'Public Sans',sans-serif;font-size:0.85rem;padding:6px 8px;border-radius:4px;border:1px solid var(--panel-edge);}
+.inline-form button{font-family:'Fraunces',serif;background:linear-gradient(180deg,#f6cf7d,#caa05a);border:none;padding:6px 12px;border-radius:4px;cursor:pointer;}
+
+/* drawer (inventory + log) */
+#drawer-toggle{
+  margin-top:18px;background:none;border:none;color:#cdbfa3;font-family:'JetBrains Mono',monospace;
+  font-size:0.74rem;letter-spacing:0.05em;cursor:pointer;padding:6px 0;text-decoration:underline;text-decoration-color:#6c5f47;
+}
+#drawer{display:none;margin-top:8px;background:#1c1f33;border-radius:8px;padding:14px;color:#d8cdae;}
+#drawer.open{display:block;}
+#drawer h3{margin:0 0 8px;color:var(--ember);font-size:0.95rem;}
+#inventory-list{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;min-height:1.4em;}
+.item-chip{
+  background:#2a2e4a;border:1px solid #423a26;border-radius:20px;padding:5px 12px;font-size:0.78rem;
+  cursor:pointer;color:#f2ead2;
+}
+.item-chip:hover{border-color:var(--ember);}
+#session-log{max-height:160px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:0.72rem;line-height:1.7;color:#a9b0cc;border-top:1px solid #2c2f4a;padding-top:10px;}
+#session-log div{margin-bottom:4px;}
+#session-log .tag{color:var(--ember-dim);}
+
+/* modal */
+#modal-overlay{position:fixed;inset:0;background:rgba(8,9,18,0.78);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100;}
+#modal{
+  background:var(--panel);border-radius:10px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto;
+  padding:22px 22px 18px;box-shadow:0 20px 50px rgba(0,0,0,0.55);
+}
+#modal h2{margin:0 0 12px;font-size:1.25rem;}
+#modal .page{
+  font-family:'Fraunces',serif;font-style:italic;color:#3a3326;background:#d8cfb2;border-left:3px solid var(--rust);
+  padding:10px 14px;margin-bottom:10px;font-size:0.92rem;line-height:1.6;border-radius:0 4px 4px 0;
+}
+#modal .page.locked{color:#9a8f74;font-style:normal;border-left-color:#a89c7d;}
+#modal textarea{width:100%;font-family:'Public Sans',sans-serif;font-size:0.86rem;padding:8px;border-radius:6px;border:1px solid var(--panel-edge);resize:vertical;min-height:54px;}
+#modal input[type=text]{width:100%;font-family:'Public Sans',sans-serif;font-size:0.86rem;padding:7px 8px;border-radius:6px;border:1px solid var(--panel-edge);margin-bottom:6px;}
+#modal .entry{border-bottom:1px solid #cdc2a4;padding:8px 0;font-size:0.86rem;}
+#modal .entry .meta{font-family:'JetBrains Mono',monospace;font-size:0.66rem;color:var(--text-dim);}
+#modal-close, #modal-submit{
+  font-family:'Fraunces',serif;background:linear-gradient(180deg,#f6cf7d,var(--ember-dim));border:none;color:var(--ink);
+  padding:8px 16px;border-radius:4px;cursor:pointer;margin-top:10px;box-shadow:0 2px 0 #7c5a22;
+}
+#modal-secondary{background:none;border:none;color:var(--text-dim);text-decoration:underline;cursor:pointer;font-size:0.8rem;margin-left:10px;}
+
+@media (max-width:480px){
+  #instrument-strip{font-size:0.64rem;padding:8px 10px;}
+  #instrument-strip .status-bits span{margin-left:8px;}
+  .sign-btn{font-size:0.75rem;padding:7px 10px;}
+}
+</style>
+</head>
+<body>
+
+<svg class="grain" aria-hidden="true"><filter id="filmgrain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" result="noise"/><feColorMatrix in="noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.9 0"/></filter><rect width="100%" height="100%" filter="url(#filmgrain)"/></svg>
+
+<div id="intro-screen">
+  <h1>Saltmere</h1>
+  <div id="intro-tagline">a small hamlet on a tidal coast</div>
+  <button id="enter-btn">Step onto the path</button>
+  <div id="intro-sub">it will still be here, whenever you arrive</div>
+</div>
+
+<div id="world" class="hidden">
+  <div id="instrument-strip">
+    <span class="world-name">Saltmere</span>
+    <span class="status-bits mono">
+      <span id="status-time"></span>
+      <span id="status-weather"></span>
+      <span id="status-tide"></span>
+    </span>
+  </div>
+
+  <main>
+    <div id="scene-frame">
+      <div id="scene-wrap">
+        <svg id="scene-svg" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice"></svg>
+        <div id="location-badge"></div>
+      </div>
+      <div id="tide-ribbon"><div id="tide-fill"></div><div class="tide-label" id="tide-ribbon-label"></div></div>
+    </div>
+
+    <div id="panel">
+      <h2 id="loc-title">&nbsp;</h2>
+      <div id="narrative">&nbsp;</div>
+      <ul id="hotspots"></ul>
+    </div>
+
+    <nav id="signpost"></nav>
+
+    <button id="drawer-toggle">▾ your keepsakes &amp; the road behind you</button>
+    <div id="drawer">
+      <h3>Carried with you</h3>
+      <div id="inventory-list"></div>
+      <h3>The road behind you</h3>
+      <div id="session-log"></div>
+    </div>
+  </main>
+</div>
+
+<div id="modal-overlay" class="hidden">
+  <div id="modal"></div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   STORAGE — with graceful in-memory fallback
+   ============================================================ */
+const memoryStore = {personal:{}, shared:{}};
+async function storeGet(key, shared){
+  try{
+    if(window.storage){
+      const r = await window.storage.get(key, !!shared);
+      return r ? r.value : null;
+    }
+  }catch(e){ /* not found or unavailable */ }
+  const bucket = shared? memoryStore.shared : memoryStore.personal;
+  return bucket.hasOwnProperty(key) ? bucket[key] : null;
+}
+async function storeSet(key, value, shared){
+  try{
+    if(window.storage){ await window.storage.set(key, value, !!shared); return true; }
+  }catch(e){}
+  const bucket = shared? memoryStore.shared : memoryStore.personal;
+  bucket[key] = value;
+  return true;
+}
+async function storeList(prefix, shared){
+  try{
+    if(window.storage){
+      const r = await window.storage.list(prefix, !!shared);
+      return r ? r.keys : [];
+    }
+  }catch(e){}
+  const bucket = shared? memoryStore.shared : memoryStore.personal;
+  return Object.keys(bucket).filter(k=>k.startsWith(prefix||""));
+}
+
+/* ============================================================
+   TIME / WEATHER / TIDE — the world's single clock
+   ============================================================ */
+function getPeriod(d){
+  const h = d.getHours();
+  if(h>=23 || h<=4) return 'night';
+  if(h<=6) return 'dawn';
+  if(h<=11) return 'morning';
+  if(h<=16) return 'afternoon';
+  if(h<=19) return 'dusk';
+  return 'evening';
+}
+const PERIOD_LABEL = {night:'night',dawn:'dawn',morning:'morning',afternoon:'afternoon',dusk:'dusk',evening:'evening'};
+
+function dayOfYear(d){const s=new Date(d.getFullYear(),0,0);return Math.floor((d-s)/86400000);}
+function seeded(seed){const x=Math.sin(seed)*10000;return x-Math.floor(x);}
+function hashStr(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;}return h;}
+function seededFor(...parts){return seeded(hashStr(parts.join('|')));}
+function getWeather(d){
+  const seed = d.getFullYear()*1000 + dayOfYear(d);
+  const r = seeded(seed);
+  if(r<0.45) return 'clear';
+  if(r<0.68) return 'hazy';
+  if(r<0.85) return 'rain';
+  return 'foggy';
+}
+const WEATHER_PHRASE = {
+  clear:"the air is clear and bright",
+  hazy:"a soft haze blurs the far edge of the water",
+  rain:"rain sweeps in off the water, steady and unhurried",
+  foggy:"a low fog has settled over the cove"
+};
+
+const TIDE_PERIOD_MS = 44*60*1000;
+function getTide(d){
+  const t = (d.getTime()/TIDE_PERIOD_MS) * 2*Math.PI;
+  const v = Math.sin(t);
+  const rising = Math.cos(t) > 0;
+  let label;
+  if(v>0.6) label='high';
+  else if(v<-0.6) label='low';
+  else label = rising ? 'rising':'falling';
+  return {value:v, rising, label};
+}
+const TIDE_PHRASE = {
+  high:"the tide is in, right up against the grass",
+  low:"the tide is far out, the flats laid bare and glistening",
+  rising:"the tide is coming in, climbing the sand a little at a time",
+  falling:"the tide is going out, leaving dark wet ground behind it"
+};
+
+function periodWord(period){
+  return {night:"Tonight",dawn:"This morning, early",morning:"This morning",afternoon:"This afternoon",dusk:"This evening",evening:"Tonight"}[period];
+}
+
+function getSeason(d){
+  const m = d.getMonth();
+  if(m===11||m===0||m===1) return 'winter';
+  if(m>=2&&m<=4) return 'spring';
+  if(m>=5&&m<=7) return 'summer';
+  return 'autumn';
+}
+const SEASON_PHRASE = {
+  winter:"the cold has settled into everything, slow and patient",
+  spring:"the gorse along the cliff has gone bright yellow again",
+  summer:"the days stretch long and the water's almost warm",
+  autumn:"the wind's turned, and the swallows are thinking about leaving"
+};
+function dayFlags(d){
+  const dow = d.getDay();
+  return {isSunday: dow===0, isThursday: dow===4, isSaturday: dow===6};
+}
+
+// ============================================================
+// WORLD SIMULATION ENGINE
+// Everything below is a pure function of the calendar date. There is no
+// background process and nothing is written to storage for it — Saltmere's
+// state on any given day can always be reconstructed by looking backward
+// from "today," which means the village has a consistent, continuous
+// history whether the player checks in every hour or once a season.
+// ============================================================
+const SIM_LOOKBACK = 12; // how many days of "recent history" the village still remembers
+
+function dateMinusDays(d, n){
+  const nd = new Date(d.getTime());
+  nd.setDate(nd.getDate()-n);
+  return nd;
+}
+
+// --- Storms and the fence they sometimes take out ---
+function isStormDay(d){
+  if(getWeather(d)!=='rain') return false;
+  return seededFor(todayKey(d), 'stormSeverity') < 0.35;
+}
+function fenceState(d){
+  for(let i=0;i<SIM_LOOKBACK;i++){
+    const stormDay = dateMinusDays(d,i);
+    if(isStormDay(stormDay)){
+      for(let k=i-1;k>=0;k--){
+        const day = dateMinusDays(d,k);
+        const daysBroken = i-k;
+        if(seededFor(todayKey(day), 'fenceRepair') < 0.15+daysBroken*0.12){
+          return {broken:false, justRepaired:k<=1};
+        }
+      }
+      return {broken:true, daysBroken:i};
+    }
+  }
+  return {broken:false, justRepaired:false};
+}
+
+// --- Residents getting tired, catching colds, occasionally taking the day off ---
+const CONDITION_DEFS = {
+  tobin:{trigger:(d)=> getWeather(d)==='rain' && seededFor(todayKey(d),'tobin','soreback')<0.16, name:'a sore back', duration:[2,4]},
+  hale: {trigger:(d)=> (getWeather(d)==='rain'||getWeather(d)==='foggy') && seededFor(todayKey(d),'hale','cold')<0.10, name:'a cold', duration:[2,5]},
+  mira: {trigger:(d)=> (getWeather(d)==='foggy'||getWeather(d)==='rain') && seededFor(todayKey(d),'mira','tired')<0.13, name:'short on sleep', duration:[1,3]},
+  wren: {trigger:(d)=> seededFor(todayKey(d),'wren','scrape')<0.065, name:'a scraped knee', duration:[1,3]}
+};
+function npcCondition(npc, d){
+  const def = CONDITION_DEFS[npc];
+  if(!def) return null;
+  for(let i=0;i<SIM_LOOKBACK;i++){
+    const day = dateMinusDays(d,i);
+    if(def.trigger(day)){
+      const [lo,hi] = def.duration;
+      const dur = lo + Math.floor(seededFor(todayKey(day),'durpick')*(hi-lo+1));
+      if(i<dur) return {name:def.name, dayIndex:i, duration:dur, recovering:i>=Math.ceil(dur/2)};
+      return null;
+    }
+  }
+  return null;
+}
+function isRestingToday(npc, d){
+  const cond = npcCondition(npc, d);
+  if(!cond || cond.dayIndex>1) return false;
+  return seededFor(todayKey(d), npc, 'restday') < 0.45;
+}
+
+// --- Small arcs between residents: a thing happens, lingers, then resolves ---
+const VILLAGE_THREADS = [
+  {id:'chess_dispute', chance:0.03, duration:[1,3]},
+  {id:'wren_shoe',      chance:0.025, duration:[1,2]},
+  {id:'bread_fail',     chance:0.025, duration:[1,1]},
+  {id:'mira_overslept', chance:0.02, duration:[1,1]},
+  {id:'net_tangle',     chance:0.025, duration:[1,2]},
+  {id:'hale_gossip',    chance:0.025, duration:[1,2]}
+];
+function currentVillageThread(d){
+  for(let i=0;i<SIM_LOOKBACK;i++){
+    const day = dateMinusDays(d,i);
+    for(const t of VILLAGE_THREADS){
+      if(seededFor(todayKey(day),'thread',t.id) < t.chance){
+        const [lo,hi] = t.duration;
+        const dur = lo + Math.floor(seededFor(todayKey(day),'threaddur',t.id)*(hi-lo+1));
+        if(i<dur) return {id:t.id, dayIndex:i, duration:dur, resolved:false};
+        if(i===dur) return {id:t.id, dayIndex:i, duration:dur, resolved:true};
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+// --- Fixed birthdays and yearly occasions, same every year, regardless of anyone visiting ---
+const NPC_BIRTHDAYS = {
+  tobin:{month:2, day:14, birthYear:1971},
+  mira: {month:8, day:3,  birthYear:1979},
+  wren: {month:5, day:21, birthYear:2016},
+  hale: {month:10,day:30, birthYear:1963}
+};
+function ageOf(npc, d){
+  const b = NPC_BIRTHDAYS[npc];
+  let age = d.getFullYear()-b.birthYear;
+  if((d.getMonth()+1)<b.month || ((d.getMonth()+1)===b.month && d.getDate()<b.day)) age--;
+  return age;
+}
+function isBirthdayToday(npc, d){
+  const b = NPC_BIRTHDAYS[npc];
+  return (d.getMonth()+1)===b.month && d.getDate()===b.day;
+}
+const VILLAGE_OCCASIONS = [
+  {month:1, day:1,  note:"Someone's strung old bunting along the dock rail, already looking slightly defeated by the wind."},
+  {month:6, day:21, note:"Driftwood's been stacked into something like a bonfire shape down on the flats, waiting for dark."},
+  {month:9, day:23, note:"A handful of late vegetables and a string of mismatched flags sit outside the shop — Saltmere's idea of a harvest display."},
+  {month:12,day:21, note:"Jars with candles in them line the village path, lit early against the dark."}
+];
+function todaysOccasion(d){
+  return VILLAGE_OCCASIONS.find(o=>o.month===(d.getMonth()+1) && o.day===d.getDate()) || null;
+}
+function occasionYesterday(d){
+  const y = dateMinusDays(d,1);
+  return VILLAGE_OCCASIONS.find(o=>o.month===(y.getMonth()+1) && o.day===y.getDate()) || null;
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let STATE = null;
+const DEFAULT_STATE = ()=>({
+  firstVisit:null,
+  lastVisit:null,
+  visitCount:0,
+  daysVisited:[],
+  flags:{
+    metTobin:false, metMira:false, metWren:false, metHale:false,
+    foundBottle:false, foundKey:false, unlockedChapel:false,
+    sawWreckOnce:false,
+    foundCat:false, catFollowing:false, returnedCat:false,
+    helpedTobinEver:false, helpedHaleEver:false, helpedMiraEver:false
+  },
+  inventory:[],
+  talk:{tobin:0, mira:0, wren:0, hale:0},
+  lastTalkSlot:{tobin:null, mira:null, wren:null, hale:null},
+  chores:{date:null, tobinNet:false, haleSweep:false, miraOil:false, foundShellToday:false},
+  gaveWrenShellCount:0
+});
+
+function migrateState(s){
+  const d = DEFAULT_STATE();
+  s.flags = Object.assign({}, d.flags, s.flags||{});
+  s.talk = Object.assign({}, d.talk, s.talk||{});
+  s.lastTalkSlot = Object.assign({}, d.lastTalkSlot, s.lastTalkSlot||{});
+  s.chores = Object.assign({}, d.chores, s.chores||{});
+  if(!Array.isArray(s.inventory)) s.inventory = [];
+  if(!Array.isArray(s.daysVisited)) s.daysVisited = [];
+  if(typeof s.gaveWrenShellCount !== 'number') s.gaveWrenShellCount = 0;
+  if(typeof s.visitCount !== 'number') s.visitCount = 0;
+  return s;
+}
+
+async function loadState(){
+  const raw = await storeGet('saltmere_state', false);
+  STATE = raw ? migrateState(JSON.parse(raw)) : DEFAULT_STATE();
+}
+async function saveState(){
+  await storeSet('saltmere_state', JSON.stringify(STATE), false);
+}
+
+function todayKey(d){return d.toISOString().slice(0,10);}
+function resetChoresIfNewDay(d){
+  const tk = todayKey(d);
+  if(STATE.chores.date !== tk){
+    STATE.chores = {date:tk, tobinNet:false, haleSweep:false, miraOil:false, foundShellToday:false};
+  }
+}
+function tierFor(count){
+  if(count>=10) return 'trusted';
+  if(count>=4) return 'familiar';
+  return 'new';
+}
+
+// Anti-repeat picker for ambient detail pools — avoids showing the exact
+// same observation twice in a row at the same spot. Session-only; not persisted.
+const lastShown = {};
+function pickFrom(key, arr){
+  if(!arr || arr.length===0) return '';
+  if(arr.length===1) return arr[0];
+  let idx = Math.floor(Math.random()*arr.length);
+  if(lastShown[key]===idx){ idx = (idx+1)%arr.length; }
+  lastShown[key] = idx;
+  return arr[idx];
+}
+
+/* ============================================================
+   NPC SCHEDULES & WINDOW LIGHTS
+   ============================================================ */
+const SCHEDULE = {
+  tobin:{night:'home', dawn:'dock', morning:'dock', afternoon:'dock', dusk:'village', evening:'home'},
+  mira:{night:'lighthouse', dawn:'cliff', morning:'lighthouse_asleep', afternoon:'lighthouse', dusk:'lighthouse', evening:'lighthouse'},
+  wren:{night:'home', dawn:'home', morning:'beach', afternoon:'beach', dusk:'home', evening:'home'},
+  hale:{night:'home', dawn:'home', morning:'village', afternoon:'village', dusk:'village', evening:'home'}
+};
+const WINDOW_LIT = {
+  tobin:{dusk:false, evening:true},
+  wren:{dusk:true, evening:true},
+  hale:{dusk:true, evening:true}
+};
+
+// Wander options: when an NPC is nominally scheduled at a real location (not
+// 'home' or asleep), there's a small deterministic chance — stable for the
+// whole day+period, the same for every visitor — that they've actually
+// drifted somewhere else nearby instead. This is what lets you sometimes
+// arrive and find the dock empty, or find two people together who you
+// weren't looking for.
+const WANDER_OPTIONS = {
+  tobin: [
+    {loc:'village', note:"gone up to needle Hale about the price of mackerel, by the sound of it"},
+    {loc:'shed', note:"shut himself in the net-shed, out of the wind"}
+  ],
+  mira: [
+    {loc:'village', note:"come down for bread and got talked into staying"},
+    {loc:'beach', note:"walking the flats, slow, the way she does when she's not really looking for anything"}
+  ],
+  wren: [
+    {loc:'dock', note:"trailing after Tobin, asking him things faster than he can answer"},
+    {loc:'shed', note:"\"helping\" in the net-shed, which mostly means being underfoot"}
+  ],
+  hale: [
+    {loc:'dock', note:"down at the dock, pretending he came for fish and not company"},
+    {loc:'beach', note:"out walking the flats, which he insists is for his knees"}
+  ]
+};
+const WANDER_CHANCE = 0.22;
+
+function getWander(npc, period, d){
+  if(!d) return null;
+  const normalLoc = SCHEDULE[npc][period];
+  if(!normalLoc || normalLoc==='home' || normalLoc.endsWith('_asleep')) return null;
+  const opts = WANDER_OPTIONS[npc];
+  if(!opts || !opts.length) return null;
+  if(npc==='hale' && dayFlags(d).isSunday) return null;
+  const roll = seededFor(todayKey(d), period, npc, 'wanderRoll');
+  if(roll >= WANDER_CHANCE) return null;
+  const idx = Math.floor(seededFor(todayKey(d), period, npc, 'wanderPick') * opts.length);
+  const opt = opts[Math.min(idx, opts.length-1)];
+  if(opt.loc===normalLoc) return null;
+  return {from:normalLoc, to:opt.loc, note:opt.note};
+}
+
+function normalizeLocForNpc(locId){
+  if(locId==='shop') return 'village';
+  if(locId==='shed') return 'dock';
+  return locId;
+}
+function npcAt(npc, period, d){
+  let loc = SCHEDULE[npc][period];
+  if(npc==='hale' && d && dayFlags(d).isSunday) loc = 'home';
+  if(d && isRestingToday(npc, d)) return {present:false, locationId:null, asleep:false, resting:true};
+  if(loc==='home') return {present:false, locationId:null, asleep:false};
+  if(loc && loc.endsWith('_asleep')) return {present:true, locationId:loc.replace('_asleep',''), asleep:true};
+  if(d){
+    const w = getWander(npc, period, d);
+    if(w) return {present:true, locationId:w.to, asleep:false, wandered:true, note:w.note};
+  }
+  return {present:true, locationId:loc, asleep:false};
+}
+function npcsAtLocation(locId, period, d){
+  const normLoc = normalizeLocForNpc(locId);
+  const names = Object.keys(SCHEDULE).filter(n=>{
+    const a = npcAt(n, period, d);
+    return a.present && normalizeLocForNpc(a.locationId)===normLoc;
+  });
+  if(normLoc==='dock' && period==='morning' && d && dayFlags(d).isSaturday && !names.includes('hale')){
+    names.push('hale');
+  }
+  return names;
+}
+
+/* ============================================================
+   PAIR VIGNETTES — glimpses of residents together
+   ============================================================ */
+const PAIR_VIGNETTES = {
+  'hale,tobin': [
+    "Tobin and Hale are bent over a half-finished chess game balanced on a barrel, both pretending not to be thinking hard about it.",
+    "Hale's mid-story; Tobin's interrupted twice already, and Hale looks ready to start the sentence over from the beginning out of sheer principle.",
+    "An argument about fish prices that's older than either of them will admit to, conducted entirely without raised voices.",
+    "Tobin's recounting a bet from over a decade ago. Hale's disputing the terms with the energy of a man who knows he's losing the argument and the bet both.",
+    "Hale says something Tobin clearly finds funnier than he's letting on — there's a long pause, then both of them go back to whatever they were doing like nothing happened."
+  ],
+  'tobin,wren': [
+    "Wren's narrating something at length while Tobin nods along, only about half listening, in the way of someone who loves the kid more than the subject.",
+    "Tobin's showing Wren a knot. Wren is already doing it wrong with enormous confidence.",
+    "Wren hands Tobin something small and round — a pebble, by the look of it. He pockets it without comment, like this happens often. It does."
+  ],
+  'hale,wren': [
+    "Wren's trying to negotiate something. Hale's not budging, but is visibly enjoying the negotiation more than he'd ever admit.",
+    "Hale pretends, for one long beat, not to remember Wren's name. Wren looks unimpressed, like she's heard this bit before. She has."
+  ],
+  'hale,mira': [
+    "Mira's in the doorway with a loaf under one arm, Hale mid-sentence about something that doesn't sound like it's really about bread.",
+    "Hale's telling a story about a gull he's decided was a sign of something. Mira's expression suggests she's heard this exact story before and is choosing patience."
+  ],
+  'mira,tobin': [
+    "Mira and Tobin are standing a little apart, not quite talking, both watching the water like it might do something.",
+    "Tobin says something short. Mira doesn't answer right away. Neither of them seems to mind the silence after."
+  ],
+  'mira,wren': [
+    "Wren's showing Mira something from the shoebox. Mira's examining it with far more seriousness than it probably warrants, and Wren looks delighted by that.",
+    "Mira's letting Wren ask a question she usually deflects from adults. She answers this one. Just this one."
+  ]
+};
+const VIGNETTE_ENTER = [
+  "",
+  "You catch the tail end of it. ",
+  "You arrive right in the middle of it. ",
+  "Whatever they're discussing breaks off slightly as you near, but not quite in time: "
+];
+const VIGNETTE_EXIT = [
+  "",
+  " You leave them to it; it's still going as you walk away.",
+  " Neither of them seems to notice you've gone.",
+  " You don't stay for the end of it."
+];
+function pairVignette(names){
+  if(!names || names.length<2) return null;
+  const sorted = [...names].sort();
+  for(let i=0;i<sorted.length;i++){
+    for(let j=i+1;j<sorted.length;j++){
+      const key = `${sorted[i]},${sorted[j]}`;
+      if(PAIR_VIGNETTES[key]){
+        const line = pickFrom('pair_'+key, PAIR_VIGNETTES[key]);
+        const enter = pickFrom('pair_enter', VIGNETTE_ENTER);
+        const exit = pickFrom('pair_exit', VIGNETTE_EXIT);
+        return `${enter}${line}${exit}`;
+      }
+    }
+  }
+  return "More than one person here right now, deep in some conversation you don't quite catch the start of.";
+}
+
+/* ============================================================
+   NPC DATA — names, first lines, dialogue pools
+   ============================================================ */
+const NPCS = {
+  tobin:{
+    name:"Tobin",
+    hobby:"whittles little wooden boats in the net-shed of an evening",
+    favouritePlace:"the end of the dock at first light, before anyone's awake to bother him about it",
+    activity(ctx){
+      const cond = npcCondition('tobin', ctx.d);
+      if(cond){
+        return cond.recovering
+          ? "moving a little easier than the last few days, but still favouring his back"
+          : "moving stiffly, one hand pressed to his lower back between jobs";
+      }
+      const pool = [
+        "coiling a line by the bollard, slow and methodical",
+        "checking a knot he's clearly checked twice already",
+        "scraping something unidentifiable off the bottom of a bucket",
+        "squinting at the horizon like it owes him an answer",
+        "rebaiting a trap with the particular focus of someone avoiding a conversation"
+      ];
+      if(ctx.weather==='rain') pool.push("standing under the shed eave, watching the rain like it's mildly personal");
+      if(ctx.tide.label==='low') pool.push("crouched at the waterline, prodding at something with a stick");
+      return pickFrom('act_tobin', pool);
+    },
+    continuations:[
+      "Anyway — where was I. Right, the conger.",
+      "As I was saying, before you wandered off.",
+      "Still here. Still mending. Some things don't change in five minutes."
+    ],
+    first:"Pulled up nothing this morning but weed and one furious crab. — Tobin. Don't get many strangers down here. Mind the boards near the end; they've been soft since the spring tide took half the rail.",
+    asleepLine:null,
+    pool(state, ctx){
+      const tier = tierFor(state.talk.tobin);
+      let lines = [
+        `Tide's ${ctx.tide.label} right now. Best fishing's an hour either side of the turn, if you ever fancy trying your luck.`,
+        "Lost a good hook to something big last week. Tell myself it was a conger. Tell myself a lot of things, these days.",
+        "Funny thing about low tide — turns up all sorts you'd never see otherwise. Found a button once. Half a boot, another time."
+      ];
+      if(tier!=='new'){
+        lines = lines.concat([
+          "I whittle these in the evenings — little boats, mostly for Wren and whoever else wants one. Keeps my hands busy when the water's too rough to bother with.",
+          "Hale and I have played chess most Tuesdays for twenty years. He still thinks he's winning more than he is.",
+          "Charge Hale a fair price for my catch and he still haggles like it's a sport. It is, a bit."
+        ]);
+      }
+      if(tier==='trusted'){
+        lines = lines.concat([
+          "Corin crewed with me, two seasons, before he had his own boat. Best hands I ever fished beside. I still set an extra mug down some mornings, out of habit more than hope.",
+          "Mira and I don't talk about the wreck. Tried, once, years back — suggested pulling what's left of her up before the tide finishes the job. She didn't speak to me for a month. Haven't brought it up since."
+        ]);
+      }
+      if(tier!=='new'){
+        lines = lines.concat([
+          "Hale still owes me from a bet eleven years back. He says it was ten. We're both wrong, probably, but I'm less wrong.",
+          "I keep an offcut of good wood aside for Wren without telling her. She thinks she just gets lucky with the bin.",
+          "Mira never returns a mug. Not once, not in years. I've stopped keeping count and just bought more mugs."
+        ]);
+      }
+      if(state.flags.foundKey && !state.flags.unlockedChapel) lines.push("That key you turned up — older than me, that lock. Older than this dock, probably.");
+      if(state.flags.unlockedChapel) lines.push("Heard you got the chapel open. Wondered if anyone ever would. Mira used to keep that lock oiled herself, you know. Never made sense to me until lately.");
+      if(ctx.weather==='rain') lines.push("Good day to stay off the water, if you've any sense. I'm staying off it, and I haven't got much.");
+      if(ctx.weather==='foggy') lines.push("Can't see the far buoy in this. Trust it's still there. Mostly trust.");
+      if(ctx.season==='winter') lines.push("Hands don't work right in this cold till about midday. Wren laughs at me for it.");
+      if(ctx.season==='summer') lines.push("Water's almost pleasant this time of year. Almost.");
+      if(ctx.dayFlags && ctx.dayFlags.isSaturday && ctx.period==='morning') lines.push("Saturdays, a few of us end up down here regardless of whether there's any real reason to. Hale included, much to his own surprise.");
+      if(state.flags.returnedCat) lines.push("Heard you found Biscuit. Hale won't admit it but he was properly worried.");
+      if(state.gaveWrenShellCount>0) lines.push("Wren's been showing anyone who'll stand still the shell you gave her. You've made her week.");
+      if(state.flags.helpedTobinEver) lines.push("Nets are holding up better than they have in months. I notice that sort of thing, even if I don't always say so.");
+      const ownCond = npcCondition('tobin', ctx.d);
+      if(ownCond) lines.push(ownCond.recovering ? "Back's easing off, finally. Few more days and I'll stop complaining about it. Probably." : "Back's been giving me grief the last couple of days. Comes from somewhere, this job. Always has.");
+      if(ctx.thread){
+        const t = ctx.thread;
+        if(t.id==='bread_fail' && !t.resolved) lines.push("Heard Hale's bread didn't rise today. He'll tell you it's the weather. It is not the weather.");
+        if(t.id==='mira_overslept') lines.push(t.resolved ? "Mira's back to her usual hours, like the lie-in never happened." : "Mira missed her usual dawn walk today. Hale says she overslept. I say good — she's earned a lie-in twice over.");
+        if(t.id==='hale_gossip') lines.push(t.resolved ? "Hale's stopped going on about the weather turning. Either it turned or he got bored." : "Hale's been telling anyone who'll stand still that the weather's turning. He's wrong about as often as he's right. Doesn't slow him down any.");
+        if(t.id==='wren_shoe') lines.push(t.resolved ? "Wren turned up the missing shoe eventually. Wrong foot's cottage, as it happens." : "Wren's lost a shoe somewhere between here and home. Found one boot today, lost one shoe. Balances out, I suppose.");
+        if(t.id==='chess_dispute') lines.push(t.resolved ? "Hale and I sorted the chess thing out. Mostly by agreeing never to discuss it again." : "Me and Hale are having words about a chess move. I'm right. I'm aware how that sounds.");
+      }
+      const haleCond = npcCondition('hale', ctx.d);
+      if(haleCond && haleCond.name==='a cold') lines.push(haleCond.recovering ? "Hale's getting over that cold, finally. Still sounds like a foghorn, but a recovering one." : "Hale's got a proper cold. Voice like a rusted gate. Won't close the shop over it, obviously.");
+      if(isBirthdayToday('tobin', ctx.d)) lines.push("It's my birthday, since you ask. No, I'm not telling you the number. No, I don't want a fuss. Hale will make one regardless.");
+      return lines;
+    }
+  },
+  mira:{
+    name:"Mira",
+    hobby:"sketches the water in a small notebook, early, before the light's worth keeping",
+    favouritePlace:"the lamp room at first light, watching the colour come back into the water",
+    activity(ctx){
+      const cond = npcCondition('mira', ctx.d);
+      if(cond){
+        return cond.recovering
+          ? "looking a little more rested than the last few days, though still slower to start a sentence than usual"
+          : "moving slowly, eyes a little red — short on sleep, by the look of her";
+      }
+      const pool = [
+        "bent over the logbook, pen not quite moving",
+        "wiping down the lens with a cloth that's seen better decades",
+        "standing very still at the window, watching nothing in particular",
+        "halfway through a sketch she doesn't show you"
+      ];
+      if(isNightish(ctx.period)) pool.push("watching the beam turn, like she's counting the seconds without meaning to");
+      if(ctx.weather==='foggy') pool.push("listening for the foghorn from the headland, the way she always does on nights like this");
+      return pickFrom('act_mira', pool);
+    },
+    continuations:[
+      "You're back. I hadn't finished, had I.",
+      "Where was I. It doesn't matter. Hello again.",
+      "Still here. The light doesn't really allow for going anywhere."
+    ],
+    first:"You're up at an odd hour. Or I am — depends how you count it. I'm Mira. I keep the light. Someone has to, and I find I don't mind the hours.",
+    asleepLine:"She's asleep in the watch-chair, one hand still resting on the logbook. You let her rest.",
+    pool(state, ctx){
+      const tier = tierFor(state.talk.mira);
+      let lines = [
+        "The light doesn't ask why it turns. There's a comfort in that, some nights.",
+        "Forty-one years my family's kept this light. Or forty-two. I lose track on purpose, some years.",
+        "I watch the water more than the lamp, if I'm honest. Old habit. Hard one to break."
+      ];
+      if(tier!=='new'){
+        lines = lines.concat([
+          "I sketch the water sometimes, early on, before the light's worth keeping on. Doesn't look like much. Helps anyway.",
+          "Hale leaves bread at the bottom of the stairs some mornings. Never says a word about it. I never ask.",
+          "I come up to the lamp room first thing, most days, just to watch the colour come into the water. Best part of the whole shift, if I'm honest."
+        ]);
+      }
+      if(tier==='trusted'){
+        lines = lines.concat([
+          "Corin used to tease me about how seriously I took this job, before he had real reason to be glad of it. I'd give a great deal to be teased about it again.",
+          "Tobin once told me to let the wreck go, pull her up, be done with it. I couldn't hear it the way he meant it, then. I think I could now. Haven't told him that."
+        ]);
+      }
+      if(tier!=='new'){
+        lines = lines.concat([
+          "Hale once tried to convince me a herring gull landing on the rail was a sign of something. I still bring it up whenever his bread doesn't rise.",
+          "Tobin whistles the same four notes every single morning, same order, same place on the dock. I could set a clock by it. That is, I suspect, exactly the problem.",
+          "My mother used to say the light answers to the house, not the person keeping it. Hale's the only one who still asks after the house, and not just after me."
+        ]);
+      }
+      if(state.flags.unlockedChapel) lines.push("You went into the chapel.  …I'm glad someone finally did. Thank you for not asking me about it.");
+      if(ctx.weather==='rain'||ctx.weather==='foggy') lines.push("Worst nights are the calm, clear ones, oddly. Nothing to push against. Just waiting. Nights like this one give the light something to actually do.");
+      if(ctx.season==='winter') lines.push("Forty-one winters, or forty-two. This one's no different. They rarely are, and somehow always a little are.");
+      if(ctx.tide.label==='low') lines.push("Low tide always pulls my eye to the flats. Old habit, like I said.");
+      if(state.flags.helpedMiraEver) lines.push("Thank you for seeing to the oil. Small thing. Helps more than you'd think, some nights.");
+      if(ctx.thread){
+        const t = ctx.thread;
+        if(t.id==='chess_dispute') lines.push(t.resolved ? "Tobin and Hale seem to have called a truce on whatever the chess argument was. Suspiciously friendly with each other today." : "Tobin came up here muttering about Hale moving a bishop when no one was looking. I didn't ask for details. There are never just details with those two.");
+        if(t.id==='net_tangle' && !t.resolved) lines.push("Tobin came past in a state about a tangled net. Something about Wren 'helping.' His face gave me all the detail I needed.");
+        if(t.id==='bread_fail' && !t.resolved) lines.push("No bread on the stairs this morning. I assume the loaf situation didn't go to plan. I'll survive.");
+      }
+      const ownCond = npcCondition('mira', ctx.d);
+      if(ownCond) lines.push(ownCond.recovering ? "Catching up on sleep, slowly. The light doesn't care either way, which helps and doesn't." : "Not sleeping well this stretch. Comes and goes. No real reason for it this time.");
+      const wrenCond = npcCondition('wren', ctx.d);
+      if(wrenCond) lines.push("Wren's got a scraped knee from some adventure or other. Wore it like a medal when she showed me.");
+      if(isBirthdayToday('mira', ctx.d)) lines.push("It's my birthday today, as it happens. Another year. Not that I'm advertising which one. The light doesn't know the difference, which I find restful.");
+      return lines;
+    }
+  },
+  wren:{
+    name:"Wren",
+    hobby:"keeps a shoebox \"museum\" of found things — buttons, bones, a chipped clay pipe",
+    favouritePlace:"the tide pools, especially right after the tide turns and everything's still dripping",
+    activity(ctx){
+      const cond = npcCondition('wren', ctx.d);
+      if(cond){
+        return cond.recovering
+          ? "still walking with a faint limp she's clearly enjoying milking for sympathy"
+          : "nursing a scraped knee with enormous, theatrical patience";
+      }
+      const pool = [
+        "narrating something to nobody in particular",
+        "deep in negotiation with a crab that isn't cooperating",
+        "drawing a careful line in the sand with a stick, for reasons known only to her",
+        "counting something under her breath and losing track"
+      ];
+      if(ctx.weather==='rain') pool.push("soaked through and delighted about it");
+      if(ctx.tide.label==='low') pool.push("crouched over a tide pool with the total focus of someone conducting important research");
+      return pickFrom('act_wren', pool);
+    },
+    continuations:[
+      "Wait, I wasn't finished. Okay. Where was I.",
+      "Oh good, you're back, I thought of something else.",
+      "Right, so — anyway."
+    ],
+    first:"Are you lost? Everyone who comes down here is either lost or fishing, and you don't look like you're fishing. I'm Wren. I found a crab claw bigger than my hand once — I lost it, but it was THIS big.",
+    asleepLine:null,
+    pool(state, ctx){
+      const tier = tierFor(state.talk.wren);
+      let lines = [
+        "I'm building a sand wall to stop the tide. It isn't working yet but I have a new theory.",
+        "Mr. Tobin says I ask too many questions. I don't think that's a real amount of questions.",
+        "There's a chapel nobody's allowed in. I looked through the window once. Hale said leave it be. I think that means there's something good in there.",
+        "I've got a whole shoebox of stuff I've found — buttons, a fish vertebra, half a clay pipe. It's basically a museum. Nobody else thinks so."
+      ];
+      if(tier!=='new'){
+        lines = lines.concat([
+          "Tobin gave me one of his little carved boats. I race it whenever it rains enough. It's undefeated, mostly because I'm the only one racing.",
+          "Mum and Dad are out on the boats more than they're not. I don't mind. Saltmere's not exactly dangerous, whatever Hale says.",
+          "I bring Tobin lucky pebbles sometimes. He keeps every single one on the shed windowsill. I've checked."
+        ]);
+      }
+      if(tier==='trusted'){
+        lines.push("Sometimes I think the grown-ups are all sad about the same thing and just don't say so. I don't ask. I just bring more pebbles.");
+      }
+      if(tier!=='new'){
+        lines = lines.concat([
+          "Me and Tobin have a code word for when Hale's about to tell the chess story again. I'm not telling you what it is. It's a good one.",
+          "Hale always pretends he doesn't remember my name for a second before he says it. I've decided that's a bit, not a real thing, on purpose.",
+          "Mira let me ring the old bell in the lighthouse once. Just the once. I think about it more than is probably normal."
+        ]);
+      }
+      if(state.flags.foundKey && !state.flags.unlockedChapel) lines.push("Is that the chapel key?! Can I come?! …Hale said no. That's so unfair.");
+      if(state.flags.unlockedChapel) lines.push("You went in the chapel and didn't even bring me. I'm telling everyone you owe me a turn.");
+      if(state.gaveWrenShellCount>0) lines.push("That shell you gave me is the best thing in the whole shoebox now. Don't tell the fish vertebra I said that.");
+      if(state.flags.returnedCat) lines.push("You found Biscuit?! I looked EVERYWHERE. Well — almost everywhere.");
+      if(ctx.weather==='rain') lines.push("Best racing weather all month, honestly.");
+      if(ctx.thread){
+        const t = ctx.thread;
+        if(t.id==='chess_dispute') lines.push(t.resolved ? "Tobin and Hale stopped arguing about the chess thing. Kind of disappointing, honestly." : "Tobin and Hale are STILL arguing about that chess move from this morning. I don't think either of them remembers which piece it even was anymore.");
+        if(t.id==='hale_gossip' && !t.resolved) lines.push("Hale told everyone the weather's about to turn. He told me first, actually, which I'm choosing to feel very important about.");
+        if(t.id==='mira_overslept') lines.push("Mira slept in today, which Hale found absolutely hilarious and Mira did not.");
+      }
+      const ownCond = npcCondition('wren', ctx.d);
+      if(ownCond) lines.push(ownCond.recovering ? "Knee's basically fine now. I'm still limping a bit on purpose, for sympathy." : "I scraped my knee doing something I'm not going to describe in detail. It's basically fine.");
+      const tobinCond = npcCondition('tobin', ctx.d);
+      if(tobinCond && tobinCond.name==='a sore back') lines.push("Tobin's walking funny. Back trouble, he says. I offered him one of my pebbles to feel better. He kept it.");
+      if(isBirthdayToday('wren', ctx.d)) lines.push(`I'm ${ageOf('wren', ctx.d)} today! Tobin gave me a boat he's been working on for AGES. I'm not telling you what Hale gave me because it's embarrassing how much I like it.`);
+      return lines;
+    }
+  },
+  hale:{
+    name:"Hale",
+    hobby:"keeps a ledger of who owes what, and a cat who disputes ownership",
+    favouritePlace:"behind the counter at closing time, when the shop's finally quiet",
+    activity(ctx){
+      const cond = npcCondition('hale', ctx.d);
+      if(cond){
+        return cond.recovering
+          ? "still a bit hoarse, but back to his usual pace behind the counter"
+          : "sniffling behind the counter, voice gone rough, refusing point-blank to call it a day";
+      }
+      const pool = [
+        "totting up the ledger with the stub of a pencil",
+        "rearranging tins that didn't really need rearranging",
+        "muttering at a delivery that's apparently wrong again",
+        "leaning on the counter in the particular way of someone whose feet hurt"
+      ];
+      if(ctx.dayFlags && ctx.dayFlags.isThursday) pool.push("wrapping something small in brown paper, tucking it away before you can see what");
+      return pickFrom('act_hale', pool);
+    },
+    continuations:[
+      "Right, where was I. Doesn't matter. Go on.",
+      "Still here. Shop's not going to run itself, but apparently I am.",
+      "Back again. Good. Gives me an excuse to stop doing the ledger."
+    ],
+    first:"Don't get many new faces. Welcome to Saltmere, for whatever that's worth most days. I'm Hale — shop, post, and the only opinion in town anybody asks for, whether I want to give it or not.",
+    asleepLine:null,
+    pool(state, ctx){
+      const tier = tierFor(state.talk.hale);
+      let lines = [
+        "Tobin's catch was sorry again today. Don't tell him I said so.",
+        "Mira keeps that light burning every night, rain or not, and has every night since I was young enough to think that was just how the world worked.",
+        "That chapel's been locked since before Wren was born. Some things are locked for a reason. Some are just locked because nobody's found the key. Hard to say which, with that one."
+      ];
+      if(tier!=='new'){
+        lines = lines.concat([
+          "Biscuit's mine, technically, though she'd dispute that. Wanders off more than she should at her age.",
+          "Tobin and I have played chess most Tuesdays since before either of us should admit to. I let him win sometimes. He thinks it's never.",
+          "I keep a ledger of who owes what. Half of Saltmere's running a tab. I don't mind. Keeps everyone coming back to settle it eventually.",
+          "Tobin and I have a long-running bet about absolutely nothing, the terms of which neither of us can actually remember anymore. We keep arguing about who's ahead.",
+          "Mira never takes the bread off the step while I'm still there to see it. Like accepting kindness in front of a witness is against some policy of hers.",
+          "Wren brought me a \u201cpresent\u201d once that turned out to be a button very clearly stolen off Tobin's coat. I gave it back to Tobin and never told either of them I knew."
+        ]);
+      }
+      if(tier==='trusted'){
+        lines = lines.concat([
+          "Knew Corin, a bit. Decent sort. Always overpaid for stamps, like it embarrassed him to haggle. I still think about that, sometimes, which is a strange thing to remember about a person you barely knew.",
+          "I tell Wren to leave the chapel be because Mira asked me to, once, a long time ago. Not because I think there's anything wrong with looking. Don't tell her I told you that.",
+          "Mira's mother used to send bread the other way — down to the shop, not up to the light. Habits run backwards sometimes, generation to generation. I never asked why it switched."
+        ]);
+      }
+      if(state.flags.unlockedChapel) lines.push("Heard the chapel's open now. (a long pause) Good. It should be.");
+      if(ctx.weather==='foggy') lines.push("Lost custom on days like this. Everyone stays put. Can't blame them.");
+      if(state.flags.returnedCat) lines.push("Can't thank you enough for that. She's an idiot cat but she's my idiot cat.");
+      if(state.flags.helpedHaleEver) lines.push("Shelves still look decent, thanks to you. I'll take the help where I can get it.");
+      if(ctx.thread){
+        const t = ctx.thread;
+        if(t.id==='wren_shoe' && !t.resolved) lines.push("Wren came in looking for a spare shoe earlier. I sold her one a size too big, purely out of curiosity about what she'd do with it.");
+        if(t.id==='net_tangle') lines.push(t.resolved ? "Tobin and Wren's tangled-net saga has apparently concluded. No injuries, by all reports." : "Tobin spent the better part of an hour today undoing a net Wren had \u201chelped\u201d with. He wasn't even that annoyed, which worries me slightly.");
+        if(t.id==='mira_overslept') lines.push("Mira slept clean through the morning, by all accounts. First time in years, and she's furious about it, which is its own kind of funny.");
+      }
+      const ownCond = npcCondition('hale', ctx.d);
+      if(ownCond) lines.push(ownCond.recovering ? "Getting over a cold. Still sound like a creaking gate, but an improving one." : "Got a cold coming on, or already arrived. Shop stays open regardless. Standards.");
+      const miraCond = npcCondition('mira', ctx.d);
+      if(miraCond && miraCond.name==='short on sleep') lines.push("Mira's not sleeping well this week. I've been leaving an extra loaf, not that she'd ever say it helps.");
+      if(state.visitCount>=30) lines.push("\u201cThe usual?\u201d Hale asks, not even looking up anymore. There isn't really a \u201cusual.\u201d That's not really the point anymore either.");
+      if(isBirthdayToday('hale', ctx.d)) lines.push("It's my birthday, for what that's worth at my age. Tobin will pretend he forgot, then produce something he's clearly had ready for a week.");
+      return lines;
+    }
+  }
+};
+
+/* ============================================================
+   PALETTES per period
+   ============================================================ */
+const PALETTE = {
+  night:   {sky:['#0a0e24','#1a2142'], silhouette:'#11162b', mid:'#1d2440', water:['#10182f','#060a16']},
+  dawn:    {sky:['#2b2f63','#e98a63'], silhouette:'#3a2f4a', mid:'#6a4e5e', water:['#7a5a55','#3a2f45']},
+  morning: {sky:['#6fb3d8','#cdeefc'], silhouette:'#2e4a3f', mid:'#4f7a64', water:['#3f86a8','#1f4f68']},
+  afternoon:{sky:['#4a9bd4','#d9f0fb'], silhouette:'#2c4a3d', mid:'#4a7a5f', water:['#3f93b8','#1d5a78']},
+  dusk:    {sky:['#2c4770','#e8744f'], silhouette:'#332a3f', mid:'#5a3f50', water:['#5a4258','#2c2438']},
+  evening: {sky:['#171b34','#343a63'], silhouette:'#181c33', mid:'#242a4a', water:['#161d38','#0a0e1f']}
+};
+const STAR_OPACITY = {night:0.9, dawn:0.12, morning:0, afternoon:0, dusk:0.08, evening:0.55};
+
+function isNightish(period){return period==='night'||period==='evening';}
+
+function celestial(d, period){
+  const hourFrac = d.getHours() + d.getMinutes()/60;
+  const isSun = !isNightish(period);
+  let frac;
+  if(isSun){ frac = (hourFrac-6)/14; }
+  else{ let h = hourFrac<6? hourFrac+24 : hourFrac; frac = (h-20)/10; }
+  frac = Math.min(1, Math.max(0, frac));
+  return {isSun, cx: 30+frac*340, cy: 175 - Math.sin(frac*Math.PI)*125};
+}
+
+let starField = null;
+function getStars(){
+  if(starField) return starField;
+  starField = [];
+  for(let i=0;i<28;i++){
+    starField.push({x: Math.random()*400, y: Math.random()*110, r: 0.4+Math.random()*0.9});
+  }
+  return starField;
+}
+
+/* ============================================================
+   SVG SCENE BUILDING
+   ============================================================ */
+function svgEl(tag, attrs, children){
+  let a = Object.keys(attrs||{}).map(k=>`${k}="${attrs[k]}"`).join(' ');
+  return `<${tag} ${a}>${children||''}</${tag}>`;
+}
+
+function skyLayer(pal, d, period, weather){
+  const cel = celestial(d, period);
+  const stars = getStars();
+  const starOp = STAR_OPACITY[period];
+  let s = `<defs>
+    <linearGradient id="skyg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${pal.sky[0]}"/>
+      <stop offset="100%" stop-color="${pal.sky[1]}"/>
+    </linearGradient>
+  </defs>`;
+  s += `<rect x="0" y="0" width="400" height="200" fill="url(#skyg)"/>`;
+  if(starOp>0){
+    stars.forEach(st=>{ s += `<circle cx="${st.x}" cy="${st.y}" r="${st.r}" fill="#fff7e0" opacity="${starOp*(0.6+Math.random()*0.4)}"/>`; });
+  }
+  if(cel.isSun){
+    s += `<circle cx="${cel.cx}" cy="${cel.cy}" r="13" fill="#fff3d2" opacity="0.95"/>`;
+    s += `<circle cx="${cel.cx}" cy="${cel.cy}" r="22" fill="#fff3d2" opacity="0.18"/>`;
+  } else {
+    s += `<circle cx="${cel.cx}" cy="${cel.cy}" r="10" fill="#eef0e6" opacity="0.92"/>`;
+  }
+  let fog = weather==='foggy'?0.30:weather==='hazy'?0.13:weather==='rain'?0.10:0;
+  if(period==='dawn'||period==='dusk') fog += 0.05;
+  if(fog>0) s += `<rect x="0" y="60" width="400" height="140" fill="#ffffff" opacity="${fog.toFixed(2)}"/>`;
+  if(weather==='rain'){
+    for(let i=0;i<14;i++){
+      const x = (i*29+7)%400;
+      s += `<line x1="${x}" y1="0" x2="${x-12}" y2="200" stroke="#cfe0ea" stroke-width="1" opacity="0.16"/>`;
+    }
+  }
+  return s;
+}
+function seasonAccentColor(season){
+  return {spring:'#e8d24a', summer:'#5a8a3f', autumn:'#b5662e', winter:'#e7eef0'}[season] || '#5a8a3f';
+}
+
+function lighthouseShape(pal, cx, baseY, scale, period, withBeam){
+  const w = 10*scale, h = 46*scale;
+  let s = `<g>`;
+  s += `<polygon points="${cx-w/2},${baseY} ${cx+w/2},${baseY} ${cx+w/2.6},${baseY-h} ${cx-w/2.6},${baseY-h}" fill="#e9e1cf"/>`;
+  for(let i=1;i<=3;i++){
+    const y1 = baseY - (h/4)*i + 4*scale;
+    s += `<rect x="${cx-w/2+1}" y="${y1}" width="${w-2}" height="${3*scale}" fill="${pal.silhouette}" opacity="0.5"/>`;
+  }
+  s += `<rect x="${cx-w/2.6-1}" y="${baseY-h-7*scale}" width="${w/1.3+2}" height="${8*scale}" fill="${'#a8503a'}"/>`;
+  const lit = isNightish(period) || period==='dusk' || period==='dawn';
+  s += `<circle cx="${cx}" cy="${baseY-h-3*scale}" r="${3*scale}" fill="${lit?'#ffe9a8':'#7a715a'}"/>`;
+  if(withBeam && isNightish(period)){
+    s += `<g class="beam" style="transform-origin:${cx}px ${baseY-h-3*scale}px;">
+      <polygon points="${cx},${baseY-h-3*scale} ${cx+170},${baseY-h-3*scale-26} ${cx+170},${baseY-h-3*scale+26}" fill="#ffe9a8" opacity="0.16"/>
+    </g>`;
+  }
+  s += `</g>`;
+  return s;
+}
+
+function cottageShape(cx, baseY, scale, litWindow, smoking){
+  const w=22*scale, h=16*scale;
+  let s = `<g>`;
+  s += `<polygon points="${cx-w/2},${baseY} ${cx+w/2},${baseY} ${cx+w/2},${baseY-h} ${cx},${baseY-h-9*scale} ${cx-w/2},${baseY-h}" fill="#42392a"/>`;
+  s += `<rect x="${cx-3*scale}" y="${baseY-h+3*scale}" width="${6*scale}" height="${6*scale}" fill="${litWindow?'#ffd27a':'#1c1f33'}"/>`;
+  if(litWindow){
+    s += `<g class="sw-curtain" style="transform-origin:${cx-3*scale}px ${baseY-h+3*scale}px"><rect x="${cx-3*scale}" y="${baseY-h+3*scale}" width="${2*scale}" height="${6*scale}" fill="#3a3326" opacity="0.55"/></g>`;
+  }
+  const chimX = cx+w*0.28, chimTop = baseY-h-9*scale-5*scale;
+  s += `<rect x="${chimX-1.6*scale}" y="${chimTop}" width="${3.2*scale}" height="${6*scale}" fill="#3a3122"/>`;
+  if(smoking){
+    for(let i=0;i<3;i++){
+      const delay = (i*2)%6;
+      s += `<g class="sw-smoke" style="animation-delay:${delay}s"><circle cx="${chimX}" cy="${chimTop-2*scale}" r="${2.4*scale}" fill="#cfc8b8"/></g>`;
+    }
+  }
+  return s+`</g>`;
+}
+
+function boatShape(cx, cy, scale, tide){
+  let cls = 'sw-boat', delay = ((cx*0.13)%3).toFixed(2);
+  let style = `transform-origin:${cx}px ${cy}px;animation-delay:${delay}s`;
+  if(tide && tide.label==='low') style += ';animation-duration:6.5s';
+  return `<g class="${cls}" style="${style}"><polygon points="${cx-14*scale},${cy} ${cx+14*scale},${cy} ${cx+9*scale},${cy+5*scale} ${cx-9*scale},${cy+5*scale}" fill="#5e4f3c"/>
+  <line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy-16*scale}" stroke="#3c3122" stroke-width="${1.2*scale}"/></g>`;
+}
+
+function waterLayer(pal, tide, topY, d, period, weather){
+  const amp = 10;
+  const y = topY - tide.value*amp;
+  let s = `<defs><linearGradient id="waterg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${pal.water[0]}"/><stop offset="100%" stop-color="${pal.water[1]}"/>
+    </linearGradient></defs>
+    <rect x="0" y="${y}" width="400" height="${200-y}" fill="url(#waterg)" opacity="0.92"/>`;
+  // celestial reflection — a soft streak tracking the sun/moon's position
+  if(d && period){
+    const cel = celestial(d, period);
+    const reflW = cel.isSun ? 30 : 14;
+    const reflColor = cel.isSun ? '#fff3d2' : '#eef0e6';
+    s += `<g class="sw-shimmer"><ellipse cx="${cel.cx}" cy="${y+10}" rx="${reflW}" ry="4" fill="${reflColor}" opacity="0.22"/>
+    <ellipse cx="${cel.cx}" cy="${y+22}" rx="${reflW*0.7}" ry="3" fill="${reflColor}" opacity="0.14"/></g>`;
+  }
+  if(weather==='rain'){
+    for(let i=0;i<7;i++){
+      const x = (i*61+13)%400;
+      s += `<g class="sw-shimmer" style="animation-delay:${(i*0.3)%2}s"><ellipse cx="${x}" cy="${y+8+((i*13)%14)}" rx="${6+(i%3)*2}" ry="2" fill="#cfe0ea" opacity="0.2"/></g>`;
+    }
+  } else {
+    for(let i=0;i<4;i++){
+      const x = (i*97+30)%400;
+      s += `<g class="sw-shimmer" style="animation-delay:${(i*0.8)%3.6}s"><line x1="${x}" y1="${y+10+((i*9)%16)}" x2="${x+18}" y2="${y+10+((i*9)%16)}" stroke="#ffffff" stroke-width="1" opacity="0.25"/></g>`;
+    }
+  }
+  s += `<rect x="0" y="${y}" width="400" height="3" fill="#ffffff" opacity="0.18"/>`;
+  return s;
+}
+
+function catShape(cx, cy, scale){
+  return `<g><ellipse cx="${cx}" cy="${cy}" rx="${7*scale}" ry="${3.4*scale}" fill="#c97a3a"/>
+    <circle cx="${cx+6*scale}" cy="${cy-2*scale}" r="${3*scale}" fill="#c97a3a"/>
+    <polygon points="${cx+8*scale},${cy-4*scale} ${cx+10*scale},${cy-7*scale} ${cx+11*scale},${cy-3.5*scale}" fill="#c97a3a"/>
+    <g class="sw-cat-tail" style="transform-origin:${cx-7*scale}px ${cy}px"><path d="M ${cx-7*scale} ${cy} Q ${cx-13*scale} ${cy-5*scale} ${cx-11*scale} ${cy-9*scale}" stroke="#c97a3a" stroke-width="${2*scale}" fill="none"/></g></g>`;
+}
+
+/* ---------- foreground prop library ----------
+   Rendered as near-black silhouettes (#171310 family) so they read as close
+   to the viewer regardless of time of day — a consistent "looking past the
+   foreground" framing across every location. */
+const FG = '#171310', FG2 = '#100d09';
+
+function grassTufts(xStart, y, count, scale, color){
+  let s='';
+  color = color || FG;
+  for(let i=0;i<count;i++){
+    const x = xStart + i*(7*scale);
+    const h = (10+((i*37)%5)*3)*scale;
+    const lean = ((i%2)?1:-1)*2*scale;
+    const delay = (i*0.37)%4.5;
+    const cls = (i%3===0) ? 'sw-grass-slow' : 'sw-grass';
+    s += `<g class="${cls}" style="transform-origin:${x}px ${y}px;animation-delay:${delay}s">`;
+    s += `<path d="M ${x} ${y} Q ${x-2*scale+lean} ${y-h*0.6} ${x-1*scale+lean} ${y-h} M ${x} ${y} Q ${x+2*scale} ${y-h*0.55} ${x+3*scale+lean} ${y-h*0.95}" stroke="${color}" stroke-width="${1.4*scale}" fill="none" stroke-linecap="round"/>`;
+    s += `</g>`;
+  }
+  return s;
+}
+function flowerClump(cx, cy, scale, color){
+  let s = grassTufts(cx-6*scale, cy, 3, scale*0.8, FG);
+  for(let i=0;i<4;i++){
+    const x = cx-5*scale+i*3.5*scale, y = cy-8*scale-((i%2)*3*scale);
+    const delay = (i*0.5)%5;
+    s += `<g class="sw-flower" style="transform-origin:${x}px ${cy}px;animation-delay:${delay}s"><circle cx="${x}" cy="${y}" r="${1.6*scale}" fill="${color}" opacity="0.9"/></g>`;
+  }
+  return s;
+}
+function fencePostFG(x, y, h, scale){
+  return `<rect x="${x-1.8*scale}" y="${y-h}" width="${3.6*scale}" height="${h}" fill="${FG}"/>`;
+}
+function fenceRunFG(x, y, w, postH, scale, gapAt){
+  let s='';
+  const posts = Math.max(2, Math.round(w/(28*scale)));
+  for(let i=0;i<=posts;i++){
+    const px = x+i*(w/posts);
+    if(gapAt && Math.abs(px-gapAt)<14*scale) continue;
+    s += fencePostFG(px, y, postH, scale);
+  }
+  if(!gapAt){
+    s += `<line x1="${x}" y1="${y-postH*0.65}" x2="${x+w}" y2="${y-postH*0.65}" stroke="${FG}" stroke-width="${2*scale}"/>`;
+    s += `<line x1="${x}" y1="${y-postH*0.3}" x2="${x+w}" y2="${y-postH*0.3}" stroke="${FG}" stroke-width="${2*scale}"/>`;
+  }
+  return s;
+}
+function ropeSwag(x1,y1,x2,y2,sag,scale){
+  const mx=(x1+x2)/2, my=Math.max(y1,y2)+sag;
+  return `<g class="sw-rope" style="transform-origin:${x1}px ${y1}px"><path d="M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}" stroke="${FG}" stroke-width="${1.6*scale}" fill="none"/></g>`;
+}
+function ropeCoilFG(cx,cy,scale){
+  let s = `<g fill="none" stroke="${FG}" stroke-width="${1.6*scale}">`;
+  for(let i=0;i<3;i++){ s+=`<ellipse cx="${cx}" cy="${cy-i*2.2*scale}" rx="${(9-i*2)*scale}" ry="${(4.5-i*1)*scale}"/>`; }
+  return s+`</g>`;
+}
+function mooringPostFG(x,y,scale,withRope){
+  let s = `<rect x="${x-2.5*scale}" y="${y-22*scale}" width="${5*scale}" height="${22*scale}" fill="${FG}"/>`;
+  s += `<ellipse cx="${x}" cy="${y-22*scale}" rx="${4*scale}" ry="${2*scale}" fill="${FG2}"/>`;
+  if(withRope) s += ropeSwag(x-1*scale,y-19*scale, x+34*scale,y-4*scale, 10*scale, scale);
+  return s;
+}
+function barrelFG(x,y,scale){
+  const w=15*scale,h=20*scale;
+  return `<g><rect x="${x-w/2}" y="${y-h}" width="${w}" height="${h}" rx="${3*scale}" fill="${FG}"/>
+  <ellipse cx="${x}" cy="${y-h}" rx="${w/2}" ry="${2.2*scale}" fill="${FG2}"/>
+  <rect x="${x-w/2}" y="${y-h*0.62}" width="${w}" height="${2*scale}" fill="${FG2}"/></g>`;
+}
+function crateFG(x,y,scale,repaired){
+  const w=18*scale,h=14*scale;
+  let s = `<rect x="${x-w/2}" y="${y-h}" width="${w}" height="${h}" fill="${FG}"/>`;
+  s += `<line x1="${x-w/2}" y1="${y-h}" x2="${x+w/2}" y2="${y}" stroke="${FG2}" stroke-width="${1*scale}"/>`;
+  if(repaired) s += `<rect x="${x-w/2}" y="${y-h*0.55}" width="${w}" height="${3*scale}" fill="#5e4f3c" opacity="0.9"/>`;
+  return s;
+}
+function benchFG(x,y,scale){
+  return `<g fill="${FG}"><rect x="${x-18*scale}" y="${y-7*scale}" width="${36*scale}" height="${3.5*scale}"/>
+  <rect x="${x-16*scale}" y="${y-3.5*scale}" width="${3*scale}" height="${9*scale}"/>
+  <rect x="${x+13*scale}" y="${y-3.5*scale}" width="${3*scale}" height="${9*scale}"/>
+  <rect x="${x-18*scale}" y="${y-16*scale}" width="${3*scale}" height="${9.5*scale}"/>
+  <rect x="${x+15*scale}" y="${y-16*scale}" width="${3*scale}" height="${9.5*scale}"/>
+  <rect x="${x-18*scale}" y="${y-18*scale}" width="${36*scale}" height="${2.8*scale}"/></g>`;
+}
+function bucketFG(x,y,scale){
+  return `<path d="M ${x-5.5*scale} ${y-12*scale} L ${x+5.5*scale} ${y-12*scale} L ${x+4.5*scale} ${y} L ${x-4.5*scale} ${y} Z" fill="${FG}"/>
+  <ellipse cx="${x}" cy="${y-12*scale}" rx="${5.5*scale}" ry="${1.6*scale}" fill="${FG2}"/>
+  <path d="M ${x-5*scale} ${y-12*scale} Q ${x} ${y-18*scale} ${x+5*scale} ${y-12*scale}" stroke="${FG}" stroke-width="${1*scale}" fill="none"/>`;
+}
+function driftwoodFG(x,y,len,scale,rot){
+  return `<g transform="rotate(${rot} ${x} ${y})"><rect x="${x}" y="${y}" width="${len*scale}" height="${4.5*scale}" rx="${2*scale}" fill="${FG}"/>
+  <line x1="${x+len*scale*0.3}" y1="${y+1*scale}" x2="${x+len*scale*0.3}" y2="${y+3.5*scale}" stroke="${FG2}" stroke-width="1"/></g>`;
+}
+function puddleFG(x,y,rx,ry,skyColor){
+  return `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${skyColor}" opacity="0.30"/><ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="none" stroke="${FG}" stroke-opacity="0.4" stroke-width="1"/>`;
+}
+function signpostFG(x,y,h,scale){
+  let s = `<rect x="${x-2.2*scale}" y="${y-h}" width="${4.4*scale}" height="${h}" fill="${FG}"/>`;
+  s += `<rect x="${x-2.2*scale}" y="${y-h+5*scale}" width="${20*scale}" height="${6*scale}" fill="${FG}"/>`;
+  s += `<polygon points="${x+18*scale},${y-h+5*scale} ${x+25*scale},${y-h+8*scale} ${x+18*scale},${y-h+11*scale}" fill="${FG}"/>`;
+  s += `<rect x="${x-2.2*scale}" y="${y-h+15*scale}" width="${16*scale}" height="${5*scale}" fill="${FG}"/>`;
+  return s;
+}
+function stoneWallFG(x,y,w,scale){
+  let s = `<rect x="${x}" y="${y-9*scale}" width="${w}" height="${9*scale}" fill="${FG}"/>`;
+  const cols = Math.max(1, Math.round(w/(9*scale)));
+  for(let i=1;i<cols;i++){ s += `<line x1="${x+i*(w/cols)}" y1="${y-9*scale}" x2="${x+i*(w/cols)}" y2="${y}" stroke="${FG2}" stroke-width="1"/>`; }
+  return s;
+}
+function lanternFG(x,y,scale,lit){
+  const flame = lit ? `<g class="sw-lantern-flame" style="transform-origin:${x}px ${y-3.5*scale}px"><rect x="${x-1.8*scale}" y="${y-6.5*scale}" width="${3.6*scale}" height="${6*scale}" fill="#ffd27a"/></g>`
+    : `<rect x="${x-1.8*scale}" y="${y-6.5*scale}" width="${3.6*scale}" height="${6*scale}" fill="#3a352c"/>`;
+  return `<line x1="${x}" y1="${y-18*scale}" x2="${x}" y2="${y-8*scale}" stroke="${FG}" stroke-width="${1.4*scale}"/>
+  <rect x="${x-3.5*scale}" y="${y-8*scale}" width="${7*scale}" height="${9*scale}" fill="${FG}"/>
+  ${flame}`;
+}
+function distantBand(pal, y, amp, opacity){
+  return `<polygon points="0,${y+amp} 70,${y-amp*0.4} 150,${y+amp*0.3} 240,${y-amp*0.6} 330,${y+amp*0.1} 400,${y-amp*0.3} 400,${y+amp+20} 0,${y+amp+20}" fill="${pal.silhouette}" opacity="${opacity}"/>`;
+}
+function gullFG(x,y,scale,seedOffset){
+  seedOffset = seedOffset||0;
+  const delay = (seedOffset*1.7)%9;
+  const wdelay = (seedOffset*0.6)%0.9;
+  return `<g class="sw-gull" style="animation-delay:-${delay}s">
+    <g class="sw-gull-wing" style="transform-origin:${x}px ${y}px;animation-delay:-${wdelay}s">
+      <path d="M ${x-6*scale} ${y} Q ${x-2*scale} ${y-4*scale} ${x} ${y}" stroke="${FG}" stroke-width="${1.3*scale}" fill="none" stroke-linecap="round"/>
+    </g>
+    <g class="sw-gull-wing" style="transform-origin:${x}px ${y}px;animation-delay:-${(wdelay+0.45)%0.9}s">
+      <path d="M ${x} ${y} Q ${x+2*scale} ${y-4*scale} ${x+6*scale} ${y}" stroke="${FG}" stroke-width="${1.3*scale}" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>`;
+}
+function gullPerchedFG(x,y,scale){
+  return `<g class="sw-bob" style="transform-origin:${x}px ${y}px;animation-delay:${(x*0.07)%3}s">
+    <ellipse cx="${x}" cy="${y-2.5*scale}" rx="${4*scale}" ry="${2.6*scale}" fill="${FG}"/>
+    <circle cx="${x+3.5*scale}" cy="${y-4*scale}" r="${1.7*scale}" fill="${FG}"/>
+    <line x1="${x-1.5*scale}" y1="${y}" x2="${x-1.5*scale}" y2="${y+2.5*scale}" stroke="${FG}" stroke-width="${0.8*scale}"/>
+    <line x1="${x+1.5*scale}" y1="${y}" x2="${x+1.5*scale}" y2="${y+2.5*scale}" stroke="${FG}" stroke-width="${0.8*scale}"/>
+  </g>`;
+}
+
+function buildScene(locId, ctx){
+  const {d, period, weather, tide, season} = ctx;
+  const pal = PALETTE[period];
+  let s = skyLayer(pal, d, period, weather);
+
+  if(locId==='cliff'){
+    s += waterLayer(pal, tide, 150, d, period, weather);
+    s += distantBand(pal, 118, 6, 0.35);
+    s += `<polygon points="0,200 0,140 90,128 150,150 400,140 400,200" fill="${pal.silhouette}"/>`;
+    s += `<polygon points="0,200 0,150 70,140 130,158 400,150 400,200" fill="${pal.mid}" opacity="0.85"/>`;
+    s += lighthouseShape(pal, 330, 128, 0.55, period, true);
+    s += cottageShape(295, 134, 0.4, false);
+    s += cottageShape(312, 136, 0.4, false);
+    s += boatShape(200, 142, 0.7, tide);
+    s += gullFG(60, 132, 1.1, 1);
+    s += gullFG(255, 120, 0.9, 5);
+    s += gullPerchedFG(296, 130, 0.8);
+    if(ctx.dayFlags && ctx.dayFlags.isThursday){
+      s += `<circle cx="55" cy="151" r="2.6" fill="#e7a8c4" opacity="0.9"/><circle cx="59" cy="150" r="2.2" fill="#f2ead2" opacity="0.9"/>`;
+    }
+    // --- foreground ---
+    s += signpostFG(70, 198, 42, 0.95);
+    s += mooringPostFG(330, 200, 1.0, true);
+    s += grassTufts(-4, 199, 14, 1.15, FG);
+    s += grassTufts(150, 200, 18, 1.0, FG);
+    s += grassTufts(280, 199, 10, 1.0, FG);
+    const sc = seasonAccentColor(ctx.season);
+    s += flowerClump(108, 198, 1.1, sc);
+    s += flowerClump(245, 199, 0.9, sc);
+    if(ctx.state.visitCount>=50){
+      s += `<ellipse cx="190" cy="197" rx="14" ry="4" fill="${FG}" opacity="0.85"/>`;
+    }
+  }
+  else if(locId==='dock'){
+    s += waterLayer(pal, tide, 130, d, period, weather);
+    s += distantBand(pal, 108, 4, 0.3);
+    s += lighthouseShape(pal, 365, 112, 0.4, period, true);
+    s += `<rect x="0" y="150" width="400" height="10" fill="${pal.silhouette}"/>`;
+    for(let i=0;i<10;i++){ s += `<line x1="${i*40}" y1="150" x2="${i*40}" y2="200" stroke="${pal.silhouette}" stroke-width="3"/>`; }
+    s += `<rect x="0" y="170" width="400" height="30" fill="#4a3c2a"/>`;
+    s += boatShape(120, 148, 1.3, tide);
+    s += boatShape(70, 152, 0.9, tide);
+    s += `<rect x="300" y="178" width="10" height="8" fill="${FG}" opacity="0.7"/><rect x="312" y="180" width="10" height="6" fill="${FG}" opacity="0.7"/>`;
+    s += gullFG(280, 95, 1.0, 3);
+    // --- foreground ---
+    for(let i=0;i<6;i++){ s += `<line x1="0" y1="${188+i*2.2}" x2="400" y2="${188+i*2.2}" stroke="${FG2}" stroke-width="1" opacity="0.5"/>`; }
+    s += mooringPostFG(55, 200, 1.3, true);
+    s += gullPerchedFG(55, 178, 0.8);
+    s += barrelFG(330, 199, 1.1);
+    s += bucketFG(360, 198, 1.0);
+    if(weather==='rain'||weather==='foggy') s += puddleFG(220, 196, 26, 6, pal.sky[1]);
+    s += ropeCoilFG(140, 197, 0.9);
+  }
+  else if(locId==='beach'){
+    s += waterLayer(pal, tide, 145, d, period, weather);
+    s += distantBand(pal, 130, 3, 0.25);
+    s += `<polygon points="0,200 0,150 130,142 260,152 400,144 400,200" fill="#c9b384"/>`;
+    s += `<polygon points="0,200 0,165 200,158 400,162 400,200" fill="#b89e6c"/>`;
+    s += `<ellipse cx="90" cy="172" rx="22" ry="7" fill="${pal.water[1]}" opacity="0.55"/>`;
+    s += `<ellipse cx="300" cy="178" rx="16" ry="5" fill="${pal.water[1]}" opacity="0.5"/>`;
+    s += `<line x1="200" y1="180" x2="225" y2="172" stroke="#7a6347" stroke-width="3"/>`;
+    s += `<line x1="205" y1="184" x2="190" y2="172" stroke="#7a6347" stroke-width="2"/>`;
+    if(tide.label==='low'){
+      s += `<polygon points="250,160 280,156 290,164 255,168" fill="#3a3326" opacity="0.85"/>`;
+      s += `<rect x="262" y="158" width="3" height="10" fill="#5a4f3a"/>`;
+    }
+    if(tide.label==='low' && !ctx.state.flags.foundKey){
+      s += `<ellipse cx="150" cy="178" rx="10" ry="4" fill="#7a6347" opacity="0.6"/>`;
+    }
+    s += lighthouseShape(pal, 372, 120, 0.35, period, true);
+    s += gullFG(160, 100, 0.9, 2);
+    s += gullFG(190, 92, 0.7, 7);
+    if(tide.label==='low') s += gullPerchedFG(270, 158, 0.6);
+    // --- foreground ---
+    s += driftwoodFG(20, 196, 38, 1.1, -4);
+    s += driftwoodFG(280, 199, 30, 1.0, 3);
+    s += grassTufts(-5, 199, 9, 1.2, FG);
+    s += grassTufts(330, 200, 10, 1.1, FG);
+    s += `<circle cx="100" cy="197" r="3" fill="${FG}" opacity="0.8"/><circle cx="108" cy="198" r="2" fill="${FG}" opacity="0.8"/><circle cx="95" cy="199" r="2.5" fill="${FG}" opacity="0.8"/>`;
+    if(ctx.state.gaveWrenShellCount>0){
+      s += `<g transform="translate(190,196) rotate(8)"><polygon points="-9,0 9,0 6,-5 -6,-5" fill="${FG}"/><line x1="0" y1="0" x2="0" y2="-11" stroke="${FG}" stroke-width="1"/></g>`;
+    }
+  }
+  else if(locId==='lighthouse'){
+    s += `<polygon points="0,200 0,120 400,120 400,200" fill="${pal.water[0]}" opacity="0.5"/>`;
+    s += distantBand(pal, 130, 4, 0.25);
+    s += `<polygon points="0,200 0,160 400,160 400,200" fill="#3a3122"/>`;
+    s += lighthouseShape(pal, 200, 168, 1.85, period, true);
+    s += `<rect x="160" y="178" width="80" height="22" fill="#2c2418"/>`;
+    s += `<rect x="190" y="184" width="20" height="16" fill="${isNightish(period)?'#ffd27a':'#1c1f33'}"/>`;
+    if(isNightish(period)){
+      s += `<g class="sw-curtain" style="transform-origin:190px 184px"><rect x="190" y="184" width="6" height="16" fill="#241e15" opacity="0.5"/></g>`;
+    }
+    s += `<rect x="225" y="172" width="3" height="6" fill="#3a3122"/>`;
+    if(season==='winter'||season==='autumn'||weather==='rain'){
+      for(let i=0;i<3;i++){ s += `<g class="sw-smoke" style="animation-delay:${(i*2)%6}s"><circle cx="226.5" cy="170" r="2.2" fill="#cfc8b8"/></g>`; }
+    }
+    s += `<rect x="162" y="196" width="9" height="4" fill="${FG}" opacity="0.85"/><rect x="172" y="197" width="9" height="4" fill="${FG}" opacity="0.85"/>`;
+    s += lanternFG(245, 196, 1.0, isNightish(period)||period==='dusk');
+    s += gullFG(330, 90, 1.0, 4);
+    // --- foreground ---
+    s += fenceRunFG(-5, 199, 130, 16, 0.85, null);
+    s += fenceRunFG(290, 199, 115, 16, 0.85, null);
+    s += benchFG(70, 198, 1.05);
+    s += grassTufts(170, 199, 7, 0.9, FG);
+    s += grassTufts(300, 199, 8, 0.9, FG);
+    if(weather==='rain'||weather==='foggy') s += puddleFG(110, 197, 12, 3.5, pal.sky[1]);
+  }
+  else if(locId==='village'){
+    s += distantBand(pal, 100, 8, 0.3);
+    s += `<polygon points="0,200 0,150 400,150 400,200" fill="#54472f"/>`;
+    s += `<rect x="0" y="190" width="400" height="10" fill="#3a3122"/>`;
+    const chillySmoke = season==='winter' || season==='autumn' || weather==='rain';
+    s += cottageShape(70, 168, 1.15, !!(WINDOW_LIT.tobin[period]), chillySmoke && (period==='morning'||period==='evening'||isNightish(period)));
+    s += cottageShape(190, 170, 1.3, !!(WINDOW_LIT.hale[period]), chillySmoke || isNightish(period));
+    s += cottageShape(310, 168, 1.0, !!(WINDOW_LIT.wren[period]), chillySmoke && isNightish(period));
+    s += `<rect x="172" y="146" width="36" height="6" fill="#a8503a"/>`;
+    s += `<rect x="20" y="178" width="3" height="18" fill="#3a3122"/><rect x="13" y="172" width="17" height="9" fill="#cdbfa3"/>`;
+    s += gullPerchedFG(355, 152, 0.7);
+    if(ctx.fence && ctx.fence.broken){
+      s += `<rect x="110" y="178" width="2.5" height="14" fill="#5e4f3c" transform="rotate(18 111 192)"/>`;
+      s += `<rect x="124" y="180" width="2.5" height="12" fill="#5e4f3c"/>`;
+      s += `<line x1="113" y1="180" x2="124" y2="182" stroke="#3a3122" stroke-width="1.5"/>`;
+    } else {
+      s += `<rect x="110" y="176" width="2.5" height="16" fill="#5e4f3c"/><rect x="124" y="176" width="2.5" height="16" fill="#5e4f3c"/>`;
+      s += `<line x1="110" y1="180" x2="126" y2="180" stroke="#7a6347" stroke-width="2"/><line x1="110" y1="186" x2="126" y2="186" stroke="#7a6347" stroke-width="2"/>`;
+    }
+    // --- foreground ---
+    s += mooringPostFG(8, 199, 0.9, false);
+    s += ropeSwag(8, 188, 95, 192, -22, 0.8);
+    s += `<g class="sw-laundry" style="transform-origin:20px 178px"><rect x="20" y="178" width="11" height="9" fill="${FG}" opacity="0.85"/></g>`;
+    s += `<g class="sw-laundry" style="transform-origin:36px 180px;animation-delay:1.1s"><rect x="36" y="180" width="9" height="7" fill="${FG}" opacity="0.85"/></g>`;
+    s += `<g class="sw-laundry" style="transform-origin:55px 181px;animation-delay:0.5s"><rect x="55" y="181" width="8" height="8" fill="${FG}" opacity="0.85"/></g>`;
+    s += barrelFG(250, 199, 1.0);
+    s += crateFG(280, 198, 0.95, true);
+    s += benchFG(355, 198, 0.9);
+    if(weather==='rain'||weather==='foggy') s += puddleFG(150, 196, 18, 5, pal.sky[1]);
+    s += grassTufts(370, 200, 5, 0.8, FG);
+  }
+  else if(locId==='chapel'){
+    s += distantBand(pal, 95, 7, 0.3);
+    s += `<polygon points="0,200 0,150 400,150 400,200" fill="${pal.mid}" opacity="0.6"/>`;
+    s += `<polygon points="160,150 240,150 240,100 200,75 160,100" fill="#5e564a"/>`;
+    s += `<rect x="196" y="68" width="8" height="10" fill="#5e564a"/><polygon points="196,68 204,68 200,58" fill="#5e564a"/>`;
+    const open = ctx.state.flags.unlockedChapel;
+    s += `<rect x="190" y="118" width="20" height="32" fill="${open? '#0b0c14':'#3a352c'}"/>`;
+    s += `<circle cx="200" cy="95" r="6" fill="${open?'#ffd27a':'#2a261f'}" opacity="0.85"/>`;
+    s += `<line x1="160" y1="150" x2="150" y2="146" stroke="#3a4a2f" stroke-width="6"/>`;
+    s += `<line x1="240" y1="150" x2="252" y2="144" stroke="#3a4a2f" stroke-width="6"/>`;
+    s += `<g class="sw-rope" style="transform-origin:168px 150px;animation-duration:6s"><path d="M 168 150 Q 165 130 172 115" stroke="#3a4a2f" stroke-width="3" fill="none"/></g>`;
+    if(weather==='rain'){ s += `<g class="sw-shimmer"><rect x="160" y="100" width="80" height="50" fill="#cfe0ea" opacity="0.08"/></g>`; }
+    // --- foreground ---
+    s += stoneWallFG(0, 199, 90, 0.95);
+    s += stoneWallFG(310, 199, 90, 0.95);
+    s += grassTufts(0, 199, 13, 1.15, FG);
+    s += grassTufts(280, 200, 16, 1.1, FG);
+    s += `<rect x="130" y="194" width="20" height="6" fill="${FG}" opacity="0.7" transform="rotate(-6 140 197)"/>`;
+  }
+  else if(locId==='shop'){
+    const lampOn = ctx.period!=='morning' || ctx.weather==='foggy' || ctx.weather==='rain';
+    s += `<rect x="0" y="0" width="400" height="200" fill="#2a2218"/>`;
+    s += `<rect x="0" y="30" width="120" height="80" fill="${pal.sky[0]}" opacity="0.7"/>`;
+    s += `<rect x="0" y="30" width="120" height="80" fill="none" stroke="#5e4f3c" stroke-width="6"/>`;
+    for(let r=0;r<3;r++){ s += `<rect x="150" y="${40+r*32}" width="220" height="22" fill="#4a3c2a"/><rect x="150" y="${40+r*32}" width="220" height="4" fill="#6e5a3e"/>`; }
+    s += lampOn ? `<g class="sw-lantern-flame" style="transform-origin:370px 105px"><circle cx="370" cy="105" r="6" fill="#ffd27a"/></g>` : `<circle cx="370" cy="105" r="6" fill="#3a352c"/>`;
+    // --- foreground counter ---
+    s += `<rect x="0" y="150" width="400" height="14" fill="#3a3020"/>`;
+    s += `<rect x="0" y="164" width="400" height="36" fill="${FG}"/>`;
+    s += `<rect x="0" y="150" width="400" height="3" fill="#6e5a3e"/>`;
+    if(ctx.state.flags.returnedCat){ s += catShape(100, 147, 1.1); }
+    s += `<rect x="60" y="143" width="26" height="9" fill="${FG2}"/><line x1="60" y1="147" x2="86" y2="147" stroke="#3a3020" stroke-width="1"/>`;
+    s += `<rect x="250" y="146" width="14" height="6" fill="${FG2}"/>`;
+    s += `<g class="sw-rope" style="transform-origin:320px 138px;animation-duration:7s"><ellipse cx="320" cy="148" rx="9" ry="5" fill="${FG2}"/><rect x="316" y="138" width="8" height="10" fill="${FG2}" opacity="0.9"/></g>`;
+  }
+  else if(locId==='shed'){
+    s += `<rect x="0" y="0" width="400" height="200" fill="#33291c"/>`;
+    s += `<rect x="20" y="20" width="60" height="50" fill="${pal.sky[0]}" opacity="0.55"/>`;
+    s += `<rect x="20" y="20" width="60" height="50" fill="none" stroke="#5e4f3c" stroke-width="5"/>`;
+    s += `<line x1="40" y1="170" x2="40" y2="60" stroke="#5e4f3c" stroke-width="5"/>`;
+    s += `<line x1="40" y1="80" x2="340" y2="74" stroke="#7a6347" stroke-width="3"/>`;
+    s += `<line x1="40" y1="110" x2="340" y2="104" stroke="#7a6347" stroke-width="3"/>`;
+    for(let i=0;i<4;i++){ s += boatShape(120+i*55, 130, 0.35); }
+    s += `<circle cx="60" cy="68" r="3" fill="#cdbfa3" opacity="0.8"/><circle cx="68" cy="68" r="3" fill="#cdbfa3" opacity="0.8"/><circle cx="64" cy="62" r="3" fill="#cdbfa3" opacity="0.8"/>`;
+    s += `<g class="sw-rope" style="transform-origin:250px 95px;animation-duration:6.5s"><path d="M 250 95 Q 280 105 250 118 Q 230 108 250 95" fill="none" stroke="#7a6347" stroke-width="2" opacity="0.7"/></g>`;
+    // --- foreground workbench ---
+    s += `<rect x="0" y="160" width="400" height="10" fill="#241e15"/>`;
+    s += `<rect x="0" y="170" width="400" height="30" fill="${FG}"/>`;
+    s += `<rect x="0" y="160" width="400" height="3" fill="#6e5a3e"/>`;
+    s += `<g transform="translate(95,150)"><polygon points="-26,12 26,12 18,2 -18,2" fill="${FG2}"/><line x1="0" y1="2" x2="0" y2="-9" stroke="${FG2}" stroke-width="1.5"/></g>`;
+    s += `<rect x="170" y="148" width="9" height="14" fill="${FG2}"/><rect x="184" y="150" width="6" height="12" fill="${FG2}"/>`;
+    s += ropeCoilFG(330, 158, 0.9);
+  }
+
+  return `<svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">${s}</svg>`;
+}
+
+/* ============================================================
+   LOCATIONS — descriptive text + hotspots
+   ============================================================ */
+const LOCATIONS = {
+  cliff:   {name:"The Cliff Path"},
+  dock:    {name:"The Dock"},
+  beach:   {name:"The Tide Flats"},
+  lighthouse:{name:"The Lighthouse"},
+  village: {name:"The Village"},
+  chapel:  {name:"The Sunken Chapel"},
+  shop:    {name:"Hale's Shop"},
+  shed:    {name:"The Net-Shed"}
+};
+const SIGNPOST_ORDER = ['cliff','dock','beach','lighthouse','village','chapel'];
+const INTERIOR_PARENT = {shop:'village', shed:'dock'};
+
+function baseDescription(locId, ctx){
+  const {period, weather, tide} = ctx;
+  const pw = periodWord(period);
+  const wp = WEATHER_PHRASE[weather];
+  const tp = TIDE_PHRASE[tide.label];
+  const df = ctx.dayFlags || dayFlags(ctx.d);
+  switch(locId){
+    case 'cliff':
+      return `${pw}, the path along the cliff is quiet underfoot, sea grass leaning all one direction. Below, ${tp}, and ${wp}. Saltmere doesn't look up as you arrive — it was already in the middle of something.`;
+    case 'dock':
+      if(df.isSaturday && period==='morning'){
+        return `Saturday morning, and the dock's busier than usual — nets out, knots being re-tied, an argument about bait that's clearly older than this conversation. ${tp.charAt(0).toUpperCase()+tp.slice(1)}.`;
+      }
+      return `The dock creaks under the day's traffic, real or imagined. ${tp.charAt(0).toUpperCase()+tp.slice(1)}. The smell of tar and old rope sits over everything.`;
+    case 'beach':
+      return `The flats stretch out, scattered with the ordinary wreckage of a coastline. ${tp.charAt(0).toUpperCase()+tp.slice(1)}, and ${wp}.`;
+    case 'lighthouse':
+      return `The tower stands the way it always has, indifferent and exact. ${isNightish(period)?'Its lamp turns steadily overhead, throwing a slow gold arm across the water.':'The lamp sits dark and patient, waiting its turn.'}`;
+    case 'village':
+      if(df.isSunday){
+        return `Quiet, even for Saltmere. Hale's shutters stay closed on Sundays — a private custom nobody's ever explained, and nobody's ever asked about twice. ${wp.charAt(0).toUpperCase()+wp.slice(1)}.`;
+      }
+      return `A short row of buildings, none of them hurrying anywhere. ${wp.charAt(0).toUpperCase()+wp.slice(1)}.`;
+    case 'chapel':
+      return ctx.state.flags.unlockedChapel
+        ? `The chapel door stands as you left it. Inside, the small room keeps its quiet, the way it has for years, the way it probably will after you've gone.`
+        : `Ivy has had its way with most of the stonework. The door is swollen shut, bound by a lock gone the colour of dried blood.`;
+    case 'shop':
+      return df.isSunday
+        ? `The shop's shut. Through the glass: dim shelves, a closed ledger, the faint shape of a sleeping cat on the counter.`
+        : `Inside, the shop smells like wax paper and old wood smoke. Shelves crowd close, stocked with the specific, unglamorous things a place like this actually needs.`;
+    case 'shed':
+      return `Tobin's net-shed, low-roofed and smelling of tar and shavings. Half-finished things sit on every surface — nets, knots, small carved boats waiting for their bows to be trimmed true.`;
+    default: return '';
+  }
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+let CURRENT_LOC = 'cliff';
+let lastTickPeriod = null, lastTickTide = null;
+const sessionLogEntries = [];
+
+function nowCtx(){
+  const d = new Date();
+  const period = getPeriod(d);
+  const weather = getWeather(d);
+  const tide = getTide(d);
+  const season = getSeason(d);
+  const df = dayFlags(d);
+  const thread = currentVillageThread(d);
+  const fence = fenceState(d);
+  const occasion = todaysOccasion(d);
+  const occasionPast = occasionYesterday(d);
+  return {d, period, weather, tide, season, dayFlags:df, thread, fence, occasion, occasionPast, state:STATE};
+}
+
+function fmtTime(d){
+  return d.toLocaleString(undefined, {weekday:'short', hour:'numeric', minute:'2-digit'});
+}
+
+function updateInstrumentStrip(ctx){
+  document.getElementById('status-time').textContent = fmtTime(ctx.d);
+  document.getElementById('status-weather').textContent = '· '+ctx.weather;
+  document.getElementById('status-tide').textContent = '· tide '+ctx.tide.label;
+  const ribbon = document.getElementById('tide-fill');
+  const pct = Math.round(((ctx.tide.value+1)/2)*100);
+  ribbon.style.height = pct+'%';
+  document.getElementById('tide-ribbon-label').textContent = `tide · ${ctx.tide.label}`;
+}
+
+function pushLog(text, tag){
+  sessionLogEntries.unshift({text, tag, t:new Date()});
+  if(sessionLogEntries.length>40) sessionLogEntries.pop();
+  renderLog();
+}
+function renderLog(){
+  const el = document.getElementById('session-log');
+  if(sessionLogEntries.length===0){ el.innerHTML = '<div style="opacity:.6">nothing yet — the path is long</div>'; return; }
+  el.innerHTML = sessionLogEntries.map(e=>{
+    const ts = e.t.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+    return `<div><span class="tag">[${ts}${e.tag? ' · '+e.tag:''}]</span> ${e.text}</div>`;
+  }).join('');
+}
+
+function renderInventory(){
+  const el = document.getElementById('inventory-list');
+  if(!STATE.inventory.length){ el.innerHTML = '<span style="opacity:.6;font-size:.8rem;">empty pockets, for now</span>'; return; }
+  el.innerHTML = STATE.inventory.map(it=>`<span class="item-chip" data-item="${it.id}">${it.icon} ${it.label}</span>`).join('');
+  el.querySelectorAll('.item-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      const it = STATE.inventory.find(i=>i.id===chip.dataset.item);
+      if(it) setNarrative(it.detail);
+    });
+  });
+}
+
+function setNarrative(html){
+  document.getElementById('narrative').innerHTML = html;
+}
+
+function renderSceneArt(){
+  const ctx = nowCtx();
+  document.getElementById('scene-svg').outerHTML = buildScene(CURRENT_LOC, ctx).replace('<svg ','<svg id="scene-svg" ');
+  updateInstrumentStrip(ctx);
+}
+
+function renderHotspots(){
+  const ctx = nowCtx();
+  resetChoresIfNewDay(ctx.d);
+  const ul = document.getElementById('hotspots');
+  ul.innerHTML = '';
+  const add = (label, fn)=>{
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.innerHTML = `<span class="bullet">»</span> ${label}`;
+    btn.addEventListener('click', fn);
+    li.appendChild(btn); ul.appendChild(li);
+  };
+
+  // NPCs present
+  npcsAtLocation(CURRENT_LOC, ctx.period, ctx.d).forEach(npcId=>{
+    const npc = NPCS[npcId];
+    const a = npcAt(npcId, ctx.period, ctx.d);
+    add(`Talk to ${npc.name}`, ()=> talkTo(npcId, a, ctx));
+  });
+
+  if(CURRENT_LOC==='cliff'){
+    add('Look out over the cove', ()=> doLookOverCove(ctx));
+    add('Read the old signpost', ()=> doSignpost(ctx));
+    add('Examine the sea pinks growing from the rock', ()=>{
+      setNarrative("Stubborn little flowers, rooted in almost nothing, blooming anyway. Nobody planted them. Nobody has to.");
+      pushLog('Examined the sea pinks.');
+    });
+    if(STATE.visitCount>=50){
+      add('Sit on the flat stone you always seem to end up on', ()=>{
+        setNarrative("It's not yours, not really — nobody's claimed it before you and nobody will after. But your body finds it now without being told, and that's its own kind of belonging.");
+        pushLog('Sat on the usual stone.');
+      });
+    }
+  }
+  if(CURRENT_LOC==='dock'){
+    add("Examine Tobin's boat, the Mabel", ()=>{
+      setNarrative("Paint peeling at the waterline, name hand-lettered and touched up more than once. She looks like she's sunk lower than she used to, but she still floats, which Tobin would say is the only review that matters.");
+      pushLog('Looked over the Mabel.');
+    });
+    add('Check the crab traps', ()=>{
+      const full = ctx.tide.label==='low' || ctx.tide.label==='falling';
+      setNarrative(full? "One trap holds two crabs, sizing each other up with real hostility. The other's empty but for a curious eel that clearly wandered in by mistake."
+        : "Both traps sit half-submerged, quiet for now. Whatever's down there isn't telling.");
+      pushLog('Checked the crab traps.');
+    });
+    add('Watch the water', ()=>{
+      const here = npcsAtLocation('dock', ctx.period, ctx.d);
+      if(here.length>=2){
+        setNarrative(pairVignette(here));
+        pushLog('Watched the dock for a while.');
+        return;
+      }
+      const pool = [
+        `${TIDE_PHRASE[ctx.tide.label].charAt(0).toUpperCase()+TIDE_PHRASE[ctx.tide.label].slice(1)}. It doesn't perform for anyone watching. It would be doing this regardless.`,
+        "Gulls are working over something gruesome near the fish-cleaning table. Best not to look closely.",
+        "Rope, salt, and the particular quiet of a working place between one job and the next.",
+        "A single boot dries upside down on a post — presumably half of the pair Hale mentioned on the notice board."
+      ];
+      if(ctx.tide.label==='low') pool.push("The old pilings show right down to the waterline, green and slick.");
+      if(ctx.tide.label==='high') pool.push("Waves slap up between the boards, close enough to catch a boot if you're not careful.");
+      if(ctx.weather==='rain') pool.push("Rain drums on the shed roof in a way that makes the whole dock sound hollow.");
+      if(ctx.weather==='foggy') pool.push("The far buoy's swallowed by fog. You can hear its bell, though, faint and irregular.");
+      if(ctx.season==='winter') pool.push("Ice rims the inside of an upturned bucket. Nobody's bothered to tip it out.");
+      if(ctx.season==='summer') pool.push("The boards are warm enough to feel through your boots, for once.");
+      const wt = getWander('tobin', ctx.period, ctx.d);
+      if(wt && wt.from==='dock') pool.push(`Tobin's mooring sits empty — ${wt.note}.`);
+      if(STATE.chores.tobinNet) pool.push("The net you helped mend earlier still hangs drying, a little lopsided but holding.");
+      else if(STATE.flags.helpedTobinEver) pool.push("Tobin's nets all look a shade tidier these days. Some of that might be you.");
+      if(STATE.flags.foundCat && !STATE.flags.returnedCat) pool.push("Something orange watches you from behind the crab traps, unbothered, in no hurry to be caught twice.");
+      setNarrative(pickFrom('dock_water', pool));
+      pushLog('Watched the water.');
+    });
+    add('Step into the net-shed', ()=> goTo('shed'));
+    if(!STATE.flags.foundCat){
+      add('Coax the cat out from behind the crab traps', async ()=>{
+        STATE.flags.foundCat = true;
+        STATE.flags.catFollowing = true;
+        await saveState();
+        setNarrative("Orange, unbothered, clearly not lost in any way that troubles her — she lets you scoop her up after a token show of resistance. No collar, just the pale ghost of where one used to sit. Worth taking her back to the village.");
+        pushLog('Coaxed a stray cat out from behind the crab traps.', 'discovery');
+        renderHotspots();
+      });
+    } else if(STATE.flags.catFollowing){
+      add('(a cat is draped over your shoulder, unbothered)', ()=>{
+        setNarrative("She's surprisingly heavy for something so unconcerned with gravity. Probably time to get her back to Hale.");
+        pushLog('Checked on the cat.');
+      });
+    }
+  }
+  if(CURRENT_LOC==='beach'){
+    add('Look in the tide pools', ()=>{
+      const here = npcsAtLocation('beach', ctx.period, ctx.d);
+      if(here.length>=2){
+        setNarrative(pairVignette(here));
+        pushLog('Watched the flats for a while.');
+        return;
+      }
+      const pool = [
+        ctx.tide.label==='low' ? "Anemones, a hermit crab dragging a shell two sizes too big, and something small and translucent that vanishes the moment you focus on it."
+          : "Most of the pools are swallowed by the rising water now, just the deep ones still visible, dark and unreadable.",
+        "A perfect ring of stones sits half-buried, clearly arranged on purpose, structural integrity questionable.",
+        "Something's clearly built a tiny fortification out of seaweed and abandoned it mid-project."
+      ];
+      if(ctx.weather==='rain') pool.push("Rain pocks the wet sand into a thousand tiny craters, gone again within a minute.");
+      if(ctx.season==='winter') pool.push("The flats are nearly empty. Even the gulls seem to be elsewhere today.");
+      if(ctx.season==='summer') pool.push("The sand's hot enough that you understand, briefly, why nobody else here is barefoot.");
+      if(ctx.tide.label==='low') pool.push("Worms have left their small curled casts all across the lower flats, like something wrote in a language nobody kept.");
+      if(ctx.tide.label==='high') pool.push("The pools are mostly drowned now; just the gulls riding the swell where they used to stand.");
+      if(STATE.flags.sawWreckOnce && ctx.tide.label!=='low') pool.push("Somewhere out past the waterline, under all that grey, the wreck's still there. You just can't see her right now.");
+      if(STATE.gaveWrenShellCount>0) pool.push("A child-sized trail of footprints loops oddly near the tide line, like someone walked in a circle for no obvious reason. You have a guess why.");
+      setNarrative(pickFrom('beach_pool', pool));
+      pushLog('Looked in the tide pools.');
+    });
+    add('Sort through the driftwood', async ()=>{
+      let txt = "Bleached grey wood, smoothed by years of this exact tide. One piece might once have been part of a railing. It's hard to tell, and harder to know if it matters.";
+      if(!STATE.chores.foundShellToday && !STATE.inventory.find(i=>i.id==='shell')){
+        STATE.chores.foundShellToday = true;
+        STATE.inventory.push({id:'shell', icon:'🐚', label:'a smooth shell', detail:"A pale, perfectly whorled shell, unbroken. The kind of thing that feels like it should belong to someone who collects this sort of thing."});
+        await saveState();
+        renderInventory();
+        txt += " Half-buried near the end of the pile, a single shell, whole and unbroken.";
+        pushLog('Found a smooth shell in the driftwood.', 'discovery');
+        renderHotspots();
+      } else {
+        pushLog('Sorted driftwood.');
+      }
+      setNarrative(txt);
+    });
+    if(ctx.tide.label==='low'){
+      add('Examine the wreck half-buried in the sand', ()=>{
+        STATE.flags.sawWreckOnce = true; saveState();
+        setNarrative("A curve of broken hull, dark with age. If you look closely, weathered letters survive along the side: …RGUE…E. The rest belongs to the barnacles now.");
+        pushLog('Found the wreck, half-buried.', 'discovery');
+      });
+    }
+    if(ctx.tide.label==='low' && !STATE.flags.foundKey){
+      add('Dig at the disturbed patch of sand', async ()=>{
+        STATE.flags.foundKey = true;
+        STATE.inventory.push({id:'key', icon:'🗝️', label:'old key', detail:"A small iron key, rusted but whole. Whatever it opens, it hasn't been opened in a very long time."});
+        await saveState();
+        renderInventory();
+        setNarrative("Your fingers hit metal before you expect it. An old iron key, rusted but intact — small enough for a door, not a chest. Worth remembering where the chapel sits.");
+        pushLog('Dug up an old iron key.', 'discovery');
+        renderHotspots();
+      });
+    } else if(!STATE.flags.foundKey){
+      add('Look at the strange patch of wet sand', ()=>{
+        setNarrative("Something pale glints just beneath the surface, out of reach while the water sits over it. Might be worth a look when the tide's further out.");
+        pushLog('Noticed something glinting under the water.');
+      });
+    }
+    if(ctx.tide.label==='high' && !STATE.flags.foundBottle){
+      add('Pick up the bottle washed against the dune grass', async ()=>{
+        STATE.flags.foundBottle = true;
+        STATE.inventory.push({id:'bottle', icon:'📜', label:"a sodden letter", detail:"\"—still no wind worth the name. Tell M. the engine's fixed, tell her not to wait supper. Back by the full moon, certain of it. — C.\"\nThe ink has bled but held. No way to know how long it travelled, or whether it ever found who it was for."});
+        await saveState();
+        renderInventory();
+        setNarrative("A bottle, sealed with wax gone brittle, rolls loose from the grass. Inside, a single folded letter, the paper soft with salt water.");
+        pushLog('Found a bottle with a letter inside.', 'discovery');
+        renderHotspots();
+      });
+    }
+    const wrenHere = npcsAtLocation('beach', ctx.period, ctx.d).includes('wren');
+    if(wrenHere && STATE.inventory.find(i=>i.id==='shell')){
+      add('Give Wren the shell you found', async ()=>{
+        STATE.inventory = STATE.inventory.filter(i=>i.id!=='shell');
+        STATE.gaveWrenShellCount = (STATE.gaveWrenShellCount||0)+1;
+        await saveState();
+        renderInventory();
+        setNarrative(STATE.gaveWrenShellCount===1
+          ? "Wren turns the shell over twice, holds it to the light, and declares it \u201cmuseum-worthy\u201d — apparently the highest honour she gives out. It joins the shoebox immediately."
+          : "Another shell for the shoebox. Wren's running commentary on exactly where it'll go in the display is more detailed than the offer probably warranted.");
+        pushLog('Gave Wren a shell.', 'kindness');
+        renderHotspots();
+      });
+    }
+    if(wrenHere && ctx.weather==='rain' && (ctx.period==='afternoon'||ctx.period==='dusk')){
+      add('Watch the boat race', ()=>{
+        setNarrative("Wren and a couple of others from the village have a fleet of small carved boats lined up where the rain-water runs off into the flats. There's shouting, a disputed finish, and at least one boat that's clearly been disqualified before for reasons nobody will explain to outsiders.");
+        pushLog('Watched the after-rain boat race.');
+      });
+    }
+  }
+  if(CURRENT_LOC==='lighthouse'){
+    add('Examine the lamp', ()=>{
+      const pool = [
+        isNightish(ctx.period) ? "The lens turns on its slow track, throwing gold across the water in a rhythm that hasn't changed in longer than anyone here has been alive." : "Unlit and waiting, the great lens looks almost ordinary in daylight — easy to forget what it does once the sun goes down.",
+        "A pair of boots, damp, sit by the door. She's been out in this, then.",
+        "A cup of tea, gone cold, sits forgotten on the windowsill.",
+        "Mira's sketchbook lies open on the table, turned to a page you don't quite get a proper look at before you'd be noticed looking.",
+        "A row of small pebbles lines the sill, oddly deliberate, oddly cared for."
+      ];
+      if(STATE.flags.helpedMiraEver) pool.push("The oil can sits by the stair, lid on properly this time. Someone's clearly used it since.");
+      if(STATE.flags.unlockedChapel) pool.push("Through the high window, if you angle just right, you can just see the chapel roof across the water.");
+      if(ctx.weather==='foggy') pool.push("The foghorn's silent tonight, which somehow feels louder than if it were sounding.");
+      if(isNightish(ctx.period)) pool.push("The stairwell smells of oil and cold stone, the particular smell of somewhere that's always slightly too cold to be fully comfortable.");
+      setNarrative(pickFrom('light_lamp', pool));
+      pushLog('Examined the lamp.');
+    });
+    add("Open Mira's logbook", ()=> openLogbook());
+    add('Open the visitors\u2019 logbook', ()=> openGuestbook());
+    if(!STATE.chores.miraOil){
+      add('Top up the lamp oil', async ()=>{
+        STATE.chores.miraOil = true;
+        STATE.flags.helpedMiraEver = true;
+        await saveState();
+        setNarrative("It's heavier work than it looks, hauling the can up the spiral stair. Mira doesn't say much about it, but she watches you do the whole climb, the way you'd watch someone handle something you cared about.");
+        pushLog('Topped up the lamp oil.', 'kindness');
+        renderHotspots();
+      });
+    }
+  }
+  if(CURRENT_LOC==='village'){
+    add('Read the notice board', ()=>{
+      const notices = [];
+      notices.push(STATE.flags.returnedCat ? "FOUND: one orange cat, answers to Biscuit (mostly). Returned safe and sound. Much obliged. — Hale" : "LOST: one orange cat, answers to Biscuit, does not come when called.");
+      notices.push("Fresh bread Tuesdays, if the oven behaves. — Hale");
+      notices.push("Found: single boot, left foot, dock-side. No questions asked, but I do have some.");
+      if(ctx.dayFlags.isThursday) notices.push("(Someone's left flowers at the cliff signpost again. Nobody's ever explained it. Nobody's ever asked twice, either.)");
+      setNarrative(notices.join('<br>'));
+      pushLog('Read the notice board.');
+    });
+    add('Look at the row of cottages', ()=>{
+      const here = npcsAtLocation('village', ctx.period, ctx.d);
+      if(here.length>=2){
+        setNarrative(pairVignette(here));
+        pushLog('Watched the village for a while.');
+        return;
+      }
+      const lines = [];
+      lines.push(isRestingToday('tobin', ctx.d) ? "Tobin's home and staying there today, by the look of his shut curtains — resting that back of his, with any luck." : (WINDOW_LIT.tobin[ctx.period] ? "Tobin's window glows low and steady." : "Tobin's window is dark — out, or not home yet."));
+      lines.push(isRestingToday('hale', ctx.d) ? "The shop sign's flipped to 'BACK SHORTLY,' which from Hale means a cold's finally won an argument." : (WINDOW_LIT.hale[ctx.period] ? "Hale's lamp is lit behind the shop glass." : "Hale's shutters are closed for the day."));
+      lines.push(isRestingToday('wren', ctx.d) ? "Wren's not out today — under orders to keep that knee up, going by the dramatic sighing audible from the path." : (WINDOW_LIT.wren[ctx.period] ? "A small light burns in Wren's window, later than it probably should." : "Wren's window sits dark."));
+      const pool = [
+        "A kettle is audibly boiling inside one of the cottages. Nobody seems to be rushing to it.",
+        "Fresh bread cools on a windowsill, the smell catching you before you even see it.",
+        "A chess board sits out on a barrel between two upturned crates, a game clearly paused mid-thought.",
+        "Wet boots dry by an open door, toes pointed at the weak afternoon sun.",
+        "Someone's humming, off-key and unselfconscious, from an upstairs window.",
+        "A lantern still burns weakly by a door, well past the hour anyone needed it. Someone forgot.",
+        "A window's been left open; the curtain breathes in and out with the draft.",
+        "A child's chalk hopscotch grid fades on the path, the numbers gone soft with rain.",
+        "A row of tools leans against a wall, mid-repair on something that isn't obvious.",
+        "Ordinary village noise: a door, a dropped something, a muffled conversation through a wall.",
+        "Nothing much. The village just getting on with itself, same as always."
+      ];
+      if(ctx.fence.broken) pool.push(`A fence post is down near the path, snapped clean — the storm a few days back, by the look of it. Nobody's gotten to it yet.${ctx.fence.daysBroken>=4 ? " It's been like that a while now." : ""}`);
+      else if(ctx.fence.justRepaired) pool.push("A fence post has been freshly mended, the new wood pale against the old. Someone got to it quickly.");
+      if(ctx.weather==='rain') pool.push("Laundry snaps hard on the line, fighting the wind and mostly losing.");
+      if(ctx.season==='spring') pool.push("Someone's planted something new in a window box. Too early to tell what.");
+      if(ctx.season==='autumn') pool.push("Leaves collect against every doorstep faster than anyone's bothering to sweep them.");
+      if(ctx.season==='winter') pool.push("Every window's steamed up from the inside, fogged with whatever's cooking.");
+      if(ctx.season==='summer') pool.push("Doors are propped open everywhere, chasing whatever breeze exists.");
+      if(ctx.dayFlags.isSaturday && ctx.period==='morning') pool.push("Quieter than usual down here — sounds like everyone's at the dock instead.");
+      if(ctx.dayFlags.isSunday) pool.push("Quieter even than usual. Sundays do something to this place that nobody's ever explained.");
+      if(STATE.flags.returnedCat) pool.push("Biscuit's curled up asleep on a doorstep like she's never been lost a day in her life.");
+      if(ctx.occasion) pool.push(ctx.occasion.note);
+      if(ctx.occasionPast) pool.push(`${ctx.occasionPast.note} Looks like last night already happened, by the state of it now.`);
+      ['tobin','mira','wren','hale'].forEach(n=>{
+        if(isBirthdayToday(n, ctx.d)) pool.push(`There's a small huddle outside one of the cottages and what might be bunting, low-key and a little crooked. Somebody's birthday, evidently, though nobody's said whose out loud.`);
+      });
+      lines.push(pickFrom('village_amb', pool));
+      setNarrative(lines.join(' '));
+      pushLog('Looked over the cottages.');
+    });
+    add('Step inside the shop', ()=> goTo('shop'));
+    if(STATE.flags.catFollowing && npcsAtLocation('village', ctx.period, ctx.d).includes('hale')){
+      add('Give Biscuit back to Hale', async ()=>{
+        STATE.flags.catFollowing = false;
+        STATE.flags.returnedCat = true;
+        await saveState();
+        setNarrative("Hale's face does something complicated for a second before settling back into its usual dryness. \u201cDon't tell her I was worried,\u201d Hale says, already sounding worried, scooping the cat up. \u201cShe'll get ideas.\u201d");
+        pushLog('Returned Biscuit to Hale.', 'kindness');
+        renderHotspots();
+      });
+    }
+  }
+  if(CURRENT_LOC==='shop'){
+    add('Look over the shelves', ()=>{
+      const pool = [
+        "Tinned fish, lamp wicks, a shelf of mismatched buttons that exists for reasons nobody's fully explained, and one jar of boiled sweets that's been there long enough to count as load-bearing.",
+        "A new delivery crate sits half-unpacked in the corner, contents still a mystery.",
+        "Someone's left an umbrella leaning by the door. Not yours. Not Hale's, by the look of it.",
+        "A second teacup sits drying by the sink. Hale doesn't strike you as a two-cup sort of person, ordinarily.",
+        "The biscuit tin's suspiciously empty for this early in the week."
+      ];
+      if(STATE.flags.returnedCat) pool.push("Cat hair on the good chair. Hale denies all knowledge.");
+      setNarrative(pickFrom('shop_shelf', pool));
+      pushLog("Looked over Hale's shelves.");
+    });
+    add('Read the ledger', ()=>{
+      const pool = [
+        "Names and numbers, mostly in Hale's hand. <em>Tobin — six mackerel, still owing. Mira — three loaves, marked paid, underlined twice for reasons unclear.</em> Half the village is in here, owing each other small, ordinary amounts, forever.",
+        "<em>Wren — one shilling, for \u201cservices rendered,\u201d no further explanation offered or apparently required.</em>",
+        "A name you don't recognise, a few pages back, paid in full, ages ago. Never appears again."
+      ];
+      setNarrative(pickFrom('shop_ledger', pool));
+      pushLog("Read Hale's ledger.");
+    });
+    if(!STATE.chores.haleSweep){
+      add("Sweep the floor while Hale's busy", async ()=>{
+        STATE.chores.haleSweep = true;
+        STATE.flags.helpedHaleEver = true;
+        await saveState();
+        setNarrative("Hale glances over, says nothing, and pours you a measure of something warm without being asked. That's the thanks. It's enough.");
+        pushLog('Swept the shop floor.', 'kindness');
+        renderHotspots();
+      });
+    }
+    add('Step back outside', ()=> goTo('village'));
+  }
+  if(CURRENT_LOC==='shed'){
+    add('Look at the half-carved boat models', ()=>{
+      const pool = [
+        "A row of little hulls in various states of finish, each one eventually destined for a child's hand and a puddle somewhere. Tobin's never sold a single one. Doesn't seem to have occurred to him.",
+        "One hull's clearly been started and abandoned twice — different wood, different decade, by the colour of it.",
+        "A child's handwriting, barely legible, labels one boat \u201cWREN'S, DO NOT SELL\u201d in determined block capitals."
+      ];
+      if(STATE.gaveWrenShellCount>0) pool.push("A shell sits on the windowsill among a small collection of lucky pebbles. Looks recently added.");
+      setNarrative(pickFrom('shed_boats', pool));
+      pushLog("Looked at Tobin's carved boats.");
+    });
+    if(!STATE.chores.tobinNet){
+      add('Help mend a net', async ()=>{
+        STATE.chores.tobinNet = true;
+        STATE.flags.helpedTobinEver = true;
+        await saveState();
+        const tobinHere = npcsAtLocation('shed', ctx.period, ctx.d).includes('tobin');
+        setNarrative(tobinHere
+          ? "Tobin shows you the knot without much ceremony, corrects your first three attempts without much patience, and nods once you get the fourth right. That's the whole compliment you're getting."
+          : "You mend a net yourself, quietly, the way Tobin showed you once. Nobody's around to see it, which feels like exactly the right way to do it.");
+        pushLog('Helped mend a fishing net.', 'kindness');
+        renderHotspots();
+      });
+    } else {
+      add('The net you mended earlier', ()=>{
+        setNarrative("Still holding. You notice these things now.");
+        pushLog('Checked the mended net.');
+      });
+    }
+    add('Step back outside', ()=> goTo('dock'));
+  }
+  if(CURRENT_LOC==='chapel'){
+    if(!STATE.flags.unlockedChapel){
+      add('Try the door', ()=>{
+        if(STATE.flags.foundKey){
+          STATE.flags.unlockedChapel = true; saveState();
+          setNarrative("The key turns, stiff and unwilling, then gives all at once. Inside: one window, salt-fogged; a candle stub, long cold; and a water-stained portrait of a young man with steady, familiar eyes, standing beside a boat — the <em>Marguerite</em>. Tucked behind the frame, a folded note, ink gone soft with age: <em>\"Keep it burning. I'll find my way by it, however long it takes.\"</em> No signature. None needed.");
+          pushLog('Unlocked the chapel.', 'discovery');
+          renderHotspots();
+          renderSceneArt();
+        } else {
+          setNarrative("The door doesn't move. Whatever opens it, it isn't force.");
+          pushLog('Tried the chapel door. Locked.');
+        }
+      });
+    } else {
+      add('Look at the portrait', ()=>{
+        setNarrative("A young man, painted with care by someone who clearly knew his face well. The boat behind him reads <em>Marguerite</em>, the same name half-legible on the wreck out on the flats.");
+        pushLog('Looked at the portrait again.');
+      });
+      add('Read the folded note', ()=>{
+        setNarrative("<em>\"Keep it burning. I'll find my way by it, however long it takes.\"</em> Whoever wrote it never said goodbye. Maybe that was the point.");
+        pushLog('Re-read the note.');
+      });
+    }
+  }
+}
+
+function cliffAmbientPool(ctx){
+  const pool = [
+    "A heron stands stock-still in the shallows below, doing whatever heron business herons do.",
+    "A fishing-boat-shaped scrap of cloud drifts over, gone within the minute.",
+    "The grass moves. The gulls argue about something. Nothing in particular happens, which is its own kind of nice."
+  ];
+  if(ctx.weather==='foggy') pool.push("The fog's swallowed most of the view; you can hear the sea more than see it.");
+  if(ctx.weather==='rain') pool.push("Rain's flattened the grass sideways. Even the gulls look unimpressed.");
+  if(ctx.season==='spring') pool.push("Gorse smell drifts up from the slope, thick and faintly of coconut.");
+  if(ctx.season==='autumn') pool.push("A handful of swallows cut low over the grass, restless, like they're arguing about when to leave.");
+  if(ctx.season==='winter') pool.push("Frost still holds in the shadow of the rocks, even past midday.");
+  if(ctx.dayFlags.isSaturday && ctx.period==='morning') pool.push("Down at the dock, more voices than usual carry up on the wind.");
+  if(ctx.dayFlags.isSunday) pool.push("Even from up here, the village looks like it's taking the day off.");
+  if(ctx.tide.label==='low') pool.push("The flats show grey and wide below, the wreck a dark smudge if you already know where to look.");
+  if(ctx.tide.label==='high') pool.push("The water's right up at the foot of the cliff, slapping at rocks it doesn't usually reach.");
+  if(STATE.flags.unlockedChapel) pool.push("From up here you can just make out the chapel roof, dark with damp, indistinguishable from any other roof unless you already know what it is.");
+  if(STATE.flags.returnedCat) pool.push("Something orange suns itself on a flat rock partway down the path. You're fairly sure that's Biscuit's doing, not yours.");
+  return pool;
+}
+
+function doLookOverCove(ctx){
+  const boatOut = npcAt('tobin', ctx.period, ctx.d).present && npcAt('tobin', ctx.period, ctx.d).locationId==='dock';
+  const parts = [];
+  parts.push(boatOut ? "A small boat works the water below — someone's out early, or late, depending how you look at it." : "The water below sits empty of boats just now.");
+  parts.push(isNightish(ctx.period) ? "Across the point, the lighthouse turns its slow gold arm over everything, including you, for one indifferent second at a time." : "The lighthouse stands quiet in daylight, saving its one trick for later.");
+  parts.push(pickFrom('cliff_amb', cliffAmbientPool(ctx)));
+  if(STATE.visitCount>=15) parts.push("You've started to recognise which gull is which, which is a ridiculous thing to be quietly proud of.");
+  setNarrative(parts.join(' '));
+  pushLog('Looked out over the cove.');
+}
+
+async function doSignpost(ctx){
+  const carvings = await storeList('carving:', true);
+  const count = carvings.length;
+  let html = `A weathered post, arrows pointing to the dock, the flats, the light, the village, and — oddly specific — "the chapel, if you must." Lower down, decades of initials are scratched into the wood, soft-edged with age. One pair, deeper than the rest: <strong>T ❤ M</strong>.`;
+  if(ctx.dayFlags.isThursday){
+    html += `<br><br>Someone's left a small bundle of flowers at the foot of the post — ${ctx.season==='winter'?'a sprig of holly, berries and all':ctx.season==='spring'?'wild primrose, still damp':ctx.season==='summer'?'sea lavender, tied with twine':'a handful of late marigolds'}. There's never a note. There's never anyone to ask. It happens most Thursdays, as far as you can tell, and has for longer than that.`;
+  }
+  html += count>0 ? `<br><br>${count} traveller${count===1?'':'s'} before you left their mark here too.` : `<br><br>No one's carved anything recent. Yours could be the first in a while.`;
+  html += `<div class="inline-form"><input type="text" id="carve-input" maxlength="4" placeholder="your initials"><button id="carve-btn">Carve</button></div>`;
+  setNarrative(html);
+  pushLog('Read the old signpost.');
+  const btn = document.getElementById('carve-btn');
+  if(btn) btn.addEventListener('click', async ()=>{
+    const input = document.getElementById('carve-input');
+    const clean = (input.value||'').trim().slice(0,4).toUpperCase();
+    if(!clean) return;
+    await storeSet(`carving:${Date.now()}-${Math.random().toString(36).slice(2,6)}`, clean, true);
+    setNarrative(`You scratch <strong>${clean}</strong> into the post, low down where it'll weather slow. Someone else might stand here someday and wonder who you were.`);
+    pushLog(`Carved "${clean}" into the signpost.`, 'mark left');
+  });
+}
+
+function talkTo(npcId, presence, ctx){
+  const npc = NPCS[npcId];
+  const metFlag = {tobin:'metTobin',mira:'metMira',wren:'metWren',hale:'metHale'}[npcId];
+  if(presence.asleep && npc.asleepLine){
+    setNarrative(`<span class="who">${npc.name}:</span> ${npc.asleepLine}`);
+    pushLog(`Found ${npc.name} asleep.`);
+    return;
+  }
+  const slotKey = `${todayKey(ctx.d)}_${ctx.period}`;
+  const metBefore = STATE.flags[metFlag];
+  const isContinuation = !!(metBefore && STATE.lastTalkSlot[npcId]===slotKey);
+
+  let line, prefix = '';
+  if(!metBefore){
+    STATE.flags[metFlag] = true;
+    line = npc.first;
+  } else if(isContinuation){
+    const conts = npc.continuations||[];
+    line = conts.length ? conts[Math.floor(Math.random()*conts.length)] : npc.pool(STATE, ctx)[0];
+  } else {
+    const pool = npc.pool(STATE, ctx);
+    line = pool[Math.floor(Math.random()*pool.length)];
+    if(presence.wandered && presence.note){
+      prefix = `You find ${npc.name} somewhere unexpected: ${presence.note}. `;
+    } else if(npc.activity){
+      prefix = `${npc.name} is ${npc.activity(ctx)} when you walk up. `;
+    }
+  }
+  STATE.talk[npcId] = (STATE.talk[npcId]||0) + 1;
+  STATE.lastTalkSlot[npcId] = slotKey;
+  saveState();
+  setNarrative(`${prefix}<span class="who">${npc.name}:</span> "${line.replace(/"/g,'&quot;')}"`);
+  pushLog(`Spoke with ${npc.name}.`, 'conversation');
+}
+
+/* ---------------- Modals: logbook & guestbook ---------------- */
+function openModalShell(){
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+function closeModal(){
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+document.getElementById('modal-overlay').addEventListener('click', (e)=>{
+  if(e.target.id==='modal-overlay') closeModal();
+});
+
+const JOURNAL_PAGES = [
+  "14th — Wind from the southwest, glass steady. Relieved the watch at dusk. Nothing to report. The light held true.",
+  "—— Tide ran higher than the almanac said it should. I keep the almanac anyway. Some habits aren't really about being right.",
+  "—— Corin would've laughed at how careful I've gotten with that lamp. He used to say I'd worry it into staying lit out of spite alone.",
+  "—— Three years now since the Marguerite didn't come back. I still walk the cliff at dawn, the way I used to, the way I tell myself I do for the view.",
+  "—— Someone opened the chapel today. I thought I'd feel it like a wound reopening. I didn't. I felt, for the first time in a long while, like the waiting was allowed to be over. The light stays lit. Not for him to find his way back now. Just because it's mine to keep, and I choose to."
+];
+
+function openLogbook(){
+  const unlocked = Math.max(1, Math.min(JOURNAL_PAGES.length, STATE.daysVisited.length + (STATE.flags.metMira?1:0) + (STATE.flags.unlockedChapel?1:0)));
+  let html = `<h2>Mira's Logbook</h2>`;
+  for(let i=0;i<JOURNAL_PAGES.length;i++){
+    if(i<unlocked) html += `<div class="page">${JOURNAL_PAGES[i]}</div>`;
+    else html += `<div class="page locked">A page, but the ink hasn't earned itself yet. Perhaps another day.</div>`;
+  }
+  html += `<button id="modal-close">Close</button>`;
+  document.getElementById('modal').innerHTML = html;
+  openModalShell();
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  pushLog('Read Mira\'s logbook.');
+}
+
+async function openGuestbook(){
+  document.getElementById('modal').innerHTML = `<h2>Visitors' Logbook</h2><div id="gb-entries" style="margin-bottom:14px;">Loading what others have left behind…</div>
+    <input type="text" id="gb-name" placeholder="Your name (or leave it blank)" maxlength="24">
+    <textarea id="gb-msg" placeholder="Leave something for the next person to find…" maxlength="220"></textarea>
+    <div><button id="modal-submit">Leave it here</button><button id="modal-secondary">Close</button></div>
+    <div style="font-size:0.7rem;color:var(--text-dim);margin-top:8px;">Visible to anyone else who opens this logbook.</div>`;
+  openModalShell();
+  document.getElementById('modal-secondary').addEventListener('click', closeModal);
+  document.getElementById('modal-submit').addEventListener('click', async ()=>{
+    const name = document.getElementById('gb-name').value.trim().slice(0,24) || 'a passerby';
+    const msg = document.getElementById('gb-msg').value.trim().slice(0,220);
+    if(!msg) return;
+    const key = `guestbook:${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+    await storeSet(key, JSON.stringify({name, msg, when:new Date().toISOString()}), true);
+    pushLog('Left a note in the visitors\u2019 logbook.', 'mark left');
+    closeModal();
+  });
+  const keys = (await storeList('guestbook:', true)).sort().reverse().slice(0,12);
+  const entries = [];
+  for(const k of keys){
+    const raw = await storeGet(k, true);
+    if(raw){ try{ entries.push(JSON.parse(raw)); }catch(e){} }
+  }
+  const el = document.getElementById('gb-entries');
+  if(!el) return;
+  if(entries.length===0){ el.innerHTML = '<div style="opacity:0.7;font-size:0.85rem;">No one has written anything yet. The first page is blank.</div>'; return; }
+  el.innerHTML = entries.map(e=>{
+    const when = new Date(e.when);
+    return `<div class="entry"><div class="meta">${escapeHtml(e.name)} — ${when.toLocaleDateString()}</div>${escapeHtml(e.msg)}</div>`;
+  }).join('');
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+
+/* ============================================================
+   LOCATION NAVIGATION
+   ============================================================ */
+function goTo(locId, opts){
+  CURRENT_LOC = locId;
+  const ctx = nowCtx();
+  document.getElementById('loc-title').textContent = LOCATIONS[locId].name;
+  document.getElementById('location-badge').textContent = LOCATIONS[locId].name;
+  renderSceneArt();
+  if(!opts || !opts.skipNarrative){
+    setNarrative(baseDescription(locId, ctx));
+  }
+  renderHotspots();
+  renderSignpost();
+}
+
+function renderSignpost(){
+  const nav = document.getElementById('signpost');
+  nav.innerHTML = '';
+  const effectiveLoc = INTERIOR_PARENT[CURRENT_LOC] || CURRENT_LOC;
+  SIGNPOST_ORDER.forEach(locId=>{
+    const btn = document.createElement('button');
+    btn.className = 'sign-btn'+(effectiveLoc===locId?' active':'');
+    let label = LOCATIONS[locId].name;
+    if(locId==='chapel' && !STATE.flags.unlockedChapel) label += ' (locked)';
+    btn.innerHTML = label;
+    btn.addEventListener('click', ()=> goTo(locId));
+    nav.appendChild(btn);
+  });
+}
+
+/* ============================================================
+   TICK — the world moves whether you click or not
+   ============================================================ */
+function tick(){
+  const ctx = nowCtx();
+  renderSceneArt();
+  if(lastTickPeriod !== null && (ctx.period !== lastTickPeriod || ctx.tide.label !== lastTickTide)){
+    if(ctx.tide.label !== lastTickTide){
+      pushLog(`The tide has turned — now ${ctx.tide.label}.`, 'world');
+    }
+    if(ctx.period !== lastTickPeriod){
+      pushLog(`Time has slipped into ${ctx.period}.`, 'world');
+    }
+    renderHotspots();
+    renderSignpost();
+  }
+  lastTickPeriod = ctx.period;
+  lastTickTide = ctx.tide.label;
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function introTagline(){
+  const ctx = nowCtx();
+  const pw = periodWord(ctx.period).toLowerCase();
+  return `${pw}, ${WEATHER_PHRASE[ctx.weather]}, and ${TIDE_PHRASE[ctx.tide.label]}.`;
+}
+
+function worldDigest(ctx, gapDays){
+  const bits = [];
+  const names = {tobin:'Tobin', mira:'Mira', wren:'Wren', hale:'Hale'};
+  const lookback = Math.min(gapDays||0, SIM_LOOKBACK);
+  for(let i=1;i<=lookback;i++){
+    const day = dateMinusDays(ctx.d, i);
+    Object.keys(names).forEach(n=>{
+      if(isBirthdayToday(n, day)) bits.push(`${names[n]} had a birthday while you were gone.`);
+    });
+  }
+  if(ctx.fence.broken) bits.push("There's storm damage to a fence near the village that nobody's gotten round to fixing yet.");
+  else if(ctx.fence.justRepaired) bits.push("A fence near the village took storm damage at some point recently — already mended now.");
+  Object.keys(names).forEach(n=>{
+    const c = npcCondition(n, ctx.d);
+    if(c && c.dayIndex<=1) bits.push(`${names[n]}'s been dealing with ${c.name}.`);
+  });
+  if(ctx.thread && ctx.thread.dayIndex<=1){
+    const labels = {
+      chess_dispute:"a chess dispute between Tobin and Hale",
+      wren_shoe:"Wren losing a shoe",
+      bread_fail:"a batch of Hale's bread not rising",
+      mira_overslept:"Mira oversleeping, of all things",
+      net_tangle:"Tobin untangling a net Wren \u201chelped\u201d with",
+      hale_gossip:"Hale spreading a weather rumour"
+    };
+    const label = labels[ctx.thread.id];
+    if(label) bits.push(ctx.thread.resolved ? `There was ${label} — already sorted out, apparently.` : `There's been ${label}.`);
+  }
+  if(ctx.occasionPast) bits.push(`Looks like Saltmere marked an occasion while you were gone — ${ctx.occasionPast.note.charAt(0).toLowerCase()+ctx.occasionPast.note.slice(1)}`);
+  return bits.slice(0,3);
+}
+
+async function enterWorld(){
+  await loadState();
+  const ctx = nowCtx();
+  const isFirst = STATE.visitCount===0;
+  const prevLast = STATE.lastVisit ? new Date(STATE.lastVisit) : null;
+
+  STATE.visitCount++;
+  STATE.lastVisit = ctx.d.toISOString();
+  if(!STATE.firstVisit) STATE.firstVisit = ctx.d.toISOString();
+  const tk = todayKey(ctx.d);
+  if(!STATE.daysVisited.includes(tk)) STATE.daysVisited.push(tk);
+  await saveState();
+
+  document.getElementById('intro-screen').classList.add('hidden');
+  document.getElementById('world').classList.remove('hidden');
+  renderInventory();
+  renderLog();
+
+  goTo('cliff', {skipNarrative:true});
+  if(isFirst){
+    setNarrative("The path appears out of the haze before you quite understand you're on it — packed dirt, sea grass leaning all one direction, the smell of salt and something like diesel drifting up from below. Saltmere has been here a long time, apparently. No one looks up as you arrive. That's not unkindness — the gulls were already arguing about something before you came, and the tide was already doing what it does, and none of it was arranged for your benefit.");
+  } else {
+    let msg = "The path is familiar underfoot now. ";
+    let gapDays = 0;
+    if(prevLast){
+      const diffMs = ctx.d - prevLast;
+      const diffH = diffMs/3600000;
+      if(diffH < 1) msg += "You only just left, really.";
+      else if(diffH < 20) msg += `It's been a few hours since you were last here.`;
+      else {
+        gapDays = Math.round(diffH/24);
+        msg += `It's been ${gapDays} day${gapDays===1?'':'s'} since you last stood here.`;
+      }
+    }
+    msg += " Saltmere carried on regardless — it always does.";
+    if(gapDays>=1){
+      const digest = worldDigest(ctx, gapDays);
+      if(digest.length) msg += " While you were away: " + digest.join(' ');
+    }
+    setNarrative(msg);
+  }
+  pushLog(isFirst ? 'Arrived in Saltmere for the first time.' : `Returned to Saltmere (visit #${STATE.visitCount}).`, 'arrival');
+
+  setInterval(tick, 30000);
+}
+
+document.getElementById('enter-btn').addEventListener('click', enterWorld);
+document.getElementById('intro-tagline').textContent = introTagline();
+
+document.getElementById('drawer-toggle').addEventListener('click', ()=>{
+  document.getElementById('drawer').classList.toggle('open');
+});
+
+})();
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(() => console.log('Saltmere service worker registered'))
+            .catch(err => console.error(err));
+    });
+}
+</script>
+</body>
+</html>
