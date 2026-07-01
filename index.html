@@ -55,6 +55,11 @@ h1,h2,h3,.serif{font-family:'Fraunces',Georgia,serif;}
 #enter-btn:hover{transform:translateY(-1px);}
 #enter-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #7c5a22;}
 #intro-sub{color:#6c7396;font-size:0.78rem;margin-top:18px;letter-spacing:0.05em;}
+#storage-warning{
+  margin-top:22px;max-width:380px;color:#e8c98a;background:rgba(232,201,138,0.08);
+  border:1px solid rgba(232,201,138,0.35);border-radius:6px;padding:12px 16px;
+  font-size:0.74rem;line-height:1.55;letter-spacing:0.01em;
+}
 
 /* ---------- world shell ---------- */
 #world{max-width:760px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
@@ -222,6 +227,7 @@ main{flex:1;padding:14px 14px 24px;}
   <div id="intro-tagline">a small hamlet on a tidal coast</div>
   <button id="enter-btn">Step onto the path</button>
   <div id="intro-sub">it will still be here, whenever you arrive</div>
+  <div id="storage-warning" class="hidden">⚠ This browser won't let Saltmere save anything right now — nothing from this visit will be remembered once you close or refresh the page. Saving usually works fine if you open this file normally rather than in a private/incognito window.</div>
 </div>
 
 <div id="world" class="hidden">
@@ -270,37 +276,251 @@ main{flex:1;padding:14px 14px 24px;}
 "use strict";
 
 /* ============================================================
-   STORAGE — with graceful in-memory fallback
+   STORAGE MANAGER — single source of truth for persistence
+
+   Backend preference and the reasoning behind it:
+
+   1. window.storage — Anthropic's artifact persistence API. Used when
+      present, because this is the only sanctioned persistence mechanism
+      while this page is rendered inside Claude.ai's artifact preview
+      (browser storage is unreliable/blocked in that sandboxed frame).
+
+   2. localStorage — the primary backend once this file is downloaded and
+      opened as an ordinary web page (by far the most common way this game
+      is actually played long-term). Chosen ahead of IndexedDB specifically
+      because nearly every state-mutating action in this codebase calls
+      saveState() WITHOUT awaiting it (fire-and-forget, by design, so a
+      click never has to wait on disk I/O). localStorage's underlying write
+      is synchronous, so even an un-awaited save is durable by the time the
+      next line of JS runs. IndexedDB writes are genuinely asynchronous —
+      an un-awaited write could in principle still be in flight if the tab
+      were closed in the same instant. localStorage is also the most
+      consistently supported storage API under a file:// origin (how a
+      double-clicked downloaded .html file is opened), where IndexedDB
+      support has historically been inconsistent across browsers.
+
+   3. IndexedDB — fallback for the rare case localStorage is unavailable
+      (disabled by browser policy, quota exhausted, certain locked-down
+      embedded webviews) but IndexedDB still works.
+
+   4. In-memory — last resort. The player is told, visibly, that nothing
+      will survive a refresh — never a silent failure.
+
+   Every candidate is verified with a real write-then-read-back probe
+   before it's trusted; nothing is assumed available just because the API
+   object exists.
    ============================================================ */
-const memoryStore = {personal:{}, shared:{}};
-async function storeGet(key, shared){
-  try{
-    if(window.storage){
-      const r = await window.storage.get(key, !!shared);
-      return r ? r.value : null;
+const StorageManager = (function(){
+  const PROBE_KEY = '__sm_probe__';
+  const LS_PREFIX = 'saltmere:';
+  const DB_NAME = 'saltmere-db';
+  const DB_VERSION = 1;
+  const STORE_NAME = 'kv';
+
+  let backend = null;      // 'claude' | 'localStorage' | 'indexedDB' | 'memory'
+  let idbConn = null;
+  let degraded = false;
+  let detectionLog = [];
+  const memoryStore = {personal:{}, shared:{}};
+
+  function log(msg){ detectionLog.push(msg); console.info('[Saltmere:storage]', msg); }
+  function warn(msg){ detectionLog.push(msg); console.warn('[Saltmere:storage]', msg); }
+
+  function nsKey(key, shared){ return (shared?'s:':'p:') + key; }
+
+  // ---- candidate: Claude artifact storage ----
+  async function tryClaudeStorage(){
+    if(typeof window==='undefined' || !window.storage){
+      warn('window.storage not present (not running inside the Claude.ai artifact frame) — trying browser storage next.');
+      return false;
     }
-  }catch(e){ /* not found or unavailable */ }
-  const bucket = shared? memoryStore.shared : memoryStore.personal;
-  return bucket.hasOwnProperty(key) ? bucket[key] : null;
-}
-async function storeSet(key, value, shared){
-  try{
-    if(window.storage){ await window.storage.set(key, value, !!shared); return true; }
-  }catch(e){}
-  const bucket = shared? memoryStore.shared : memoryStore.personal;
-  bucket[key] = value;
-  return true;
-}
-async function storeList(prefix, shared){
-  try{
-    if(window.storage){
-      const r = await window.storage.list(prefix, !!shared);
-      return r ? r.keys : [];
+    try{
+      await window.storage.set(PROBE_KEY, 'ok', false);
+      const r = await window.storage.get(PROBE_KEY, false);
+      const ok = !!r && r.value === 'ok';
+      try{ await window.storage.delete(PROBE_KEY, false); }catch(e){}
+      if(!ok) warn('window.storage is present but failed a write-then-read-back check — treating it as unavailable.');
+      return ok;
+    }catch(e){
+      warn('window.storage threw during the round-trip check (' + e.message + ') — treating it as unavailable.');
+      return false;
     }
-  }catch(e){}
-  const bucket = shared? memoryStore.shared : memoryStore.personal;
-  return Object.keys(bucket).filter(k=>k.startsWith(prefix||""));
-}
+  }
+
+  // ---- candidate: localStorage ----
+  function tryLocalStorage(){
+    try{
+      if(typeof localStorage==='undefined'){ warn('localStorage is not defined in this environment.'); return false; }
+      const k = LS_PREFIX+PROBE_KEY;
+      localStorage.setItem(k, 'ok');
+      const ok = localStorage.getItem(k) === 'ok';
+      localStorage.removeItem(k);
+      if(!ok) warn('localStorage failed a write-then-read-back check.');
+      return ok;
+    }catch(e){
+      warn('localStorage threw during the round-trip check (' + e.message + ') — likely disabled by browser settings or full.');
+      return false;
+    }
+  }
+
+  // ---- candidate: IndexedDB ----
+  function openIDB(){
+    return new Promise((resolve, reject)=>{
+      if(typeof indexedDB==='undefined'){ reject(new Error('indexedDB not defined')); return; }
+      let req;
+      try{ req = indexedDB.open(DB_NAME, DB_VERSION); }catch(e){ reject(e); return; }
+      req.onupgradeneeded = ()=>{
+        const db = req.result;
+        if(!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+      };
+      req.onsuccess = ()=> resolve(req.result);
+      req.onerror = ()=> reject(req.error || new Error('indexedDB open failed'));
+      req.onblocked = ()=> reject(new Error('indexedDB open blocked by another tab'));
+    });
+  }
+  function idbSet(key, value, shared){
+    return new Promise((resolve, reject)=>{
+      const tx = idbConn.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(value, nsKey(key, shared));
+      tx.oncomplete = ()=> resolve(true);
+      tx.onerror = ()=> reject(tx.error);
+    });
+  }
+  function idbGet(key, shared){
+    return new Promise((resolve, reject)=>{
+      const tx = idbConn.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(nsKey(key, shared));
+      req.onsuccess = ()=> resolve(req.result===undefined ? null : req.result);
+      req.onerror = ()=> reject(req.error);
+    });
+  }
+  function idbDelete(key, shared){
+    return new Promise((resolve, reject)=>{
+      const tx = idbConn.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete(nsKey(key, shared));
+      tx.oncomplete = ()=> resolve(true);
+      tx.onerror = ()=> reject(tx.error);
+    });
+  }
+  function idbListKeys(prefix, shared){
+    return new Promise((resolve, reject)=>{
+      const tx = idbConn.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).getAllKeys();
+      req.onsuccess = ()=>{
+        const nsPrefix = shared?'s:':'p:';
+        const full = nsPrefix + (prefix||'');
+        const keys = req.result
+          .filter(k=>typeof k==='string' && k.indexOf(full)===0)
+          .map(k=>k.slice(nsPrefix.length));
+        resolve(keys);
+      };
+      req.onerror = ()=> reject(req.error);
+    });
+  }
+  async function tryIndexedDB(){
+    try{
+      idbConn = await openIDB();
+      await idbSet(PROBE_KEY, 'ok', false);
+      const v = await idbGet(PROBE_KEY, false);
+      const ok = v === 'ok';
+      await idbDelete(PROBE_KEY, false);
+      if(!ok) warn('indexedDB failed a write-then-read-back check.');
+      return ok;
+    }catch(e){
+      warn('indexedDB unavailable (' + e.message + ').');
+      return false;
+    }
+  }
+
+  // ---- detection sequence ----
+  let readyResolve;
+  const ready = new Promise(res=>{ readyResolve = res; });
+
+  async function detect(){
+    if(await tryClaudeStorage()){ backend='claude'; log('persistence backend: Claude artifact storage (window.storage).'); readyResolve(); return; }
+    if(tryLocalStorage()){ backend='localStorage'; log('persistence backend: localStorage.'); readyResolve(); return; }
+    if(await tryIndexedDB()){ backend='indexedDB'; log('persistence backend: indexedDB.'); readyResolve(); return; }
+    backend='memory';
+    degraded = true;
+    warn('No persistent storage backend is available. Falling back to in-memory storage — progress will NOT survive a refresh or reopen. This is shown to the player, not hidden.');
+    readyResolve();
+  }
+  const detectionPromise = detect();
+
+  // ---- public API ----
+  async function get(key, shared){
+    await ready;
+    try{
+      if(backend==='claude'){ const r = await window.storage.get(key, !!shared); return r? r.value : null; }
+      if(backend==='localStorage'){ return localStorage.getItem(LS_PREFIX+nsKey(key,shared)); }
+      if(backend==='indexedDB'){ return await idbGet(key, !!shared); }
+    }catch(e){
+      warn(`get("${key}") failed on backend "${backend}" (${e.message}); reading from the in-memory fallback for this call.`);
+    }
+    const bucket = shared? memoryStore.shared : memoryStore.personal;
+    return bucket.hasOwnProperty(key) ? bucket[key] : null;
+  }
+  async function set(key, value, shared){
+    await ready;
+    try{
+      if(backend==='claude'){ await window.storage.set(key, value, !!shared); return true; }
+      if(backend==='localStorage'){ localStorage.setItem(LS_PREFIX+nsKey(key,shared), value); return true; }
+      if(backend==='indexedDB'){ await idbSet(key, value, !!shared); return true; }
+    }catch(e){
+      warn(`set("${key}") failed on backend "${backend}" (${e.message}); this write only landed in the in-memory fallback and will be lost on refresh.`);
+    }
+    const bucket = shared? memoryStore.shared : memoryStore.personal;
+    bucket[key] = value;
+    return true;
+  }
+  async function del(key, shared){
+    await ready;
+    try{
+      if(backend==='claude'){ await window.storage.delete(key, !!shared); return true; }
+      if(backend==='localStorage'){ localStorage.removeItem(LS_PREFIX+nsKey(key,shared)); return true; }
+      if(backend==='indexedDB'){ await idbDelete(key, !!shared); return true; }
+    }catch(e){
+      warn(`delete("${key}") failed on backend "${backend}" (${e.message}).`);
+    }
+    const bucket = shared? memoryStore.shared : memoryStore.personal;
+    delete bucket[key];
+    return true;
+  }
+  async function list(prefix, shared){
+    await ready;
+    try{
+      if(backend==='claude'){ const r = await window.storage.list(prefix, !!shared); return r? r.keys : []; }
+      if(backend==='localStorage'){
+        const nsPrefix = LS_PREFIX + (shared?'s:':'p:');
+        const full = nsPrefix + (prefix||'');
+        const out = [];
+        for(let i=0;i<localStorage.length;i++){
+          const k = localStorage.key(i);
+          if(k && k.indexOf(full)===0) out.push(k.slice(nsPrefix.length));
+        }
+        return out;
+      }
+      if(backend==='indexedDB'){ return await idbListKeys(prefix, !!shared); }
+    }catch(e){
+      warn(`list("${prefix}") failed on backend "${backend}" (${e.message}); listing from the in-memory fallback for this call.`);
+    }
+    const bucket = shared? memoryStore.shared : memoryStore.personal;
+    return Object.keys(bucket).filter(k=>k.startsWith(prefix||""));
+  }
+
+  return {
+    ready, get, set, delete:del, list,
+    get backend(){ return backend; },
+    get degraded(){ return degraded; },
+    get log(){ return detectionLog.slice(); },
+    whenReady(){ return detectionPromise; }
+  };
+})();
+
+async function storeGet(key, shared){ return StorageManager.get(key, shared); }
+async function storeSet(key, value, shared){ return StorageManager.set(key, value, shared); }
+async function storeDelete(key, shared){ return StorageManager.delete(key, shared); }
+async function storeList(prefix, shared){ return StorageManager.list(prefix, shared); }
 
 /* ============================================================
    TIME / WEATHER / TIDE — the world's single clock
@@ -510,13 +730,26 @@ const DEFAULT_STATE = ()=>({
     foundBottle:false, foundKey:false, unlockedChapel:false,
     sawWreckOnce:false,
     foundCat:false, catFollowing:false, returnedCat:false,
-    helpedTobinEver:false, helpedHaleEver:false, helpedMiraEver:false
+    helpedTobinEver:false, helpedHaleEver:false, helpedMiraEver:false,
+    nicknameKnown:false
   },
   inventory:[],
   talk:{tobin:0, mira:0, wren:0, hale:0},
   lastTalkSlot:{tobin:null, mira:null, wren:null, hale:null},
   chores:{date:null, tobinNet:false, haleSweep:false, miraOil:false, foundShellToday:false},
-  gaveWrenShellCount:0
+  gaveWrenShellCount:0,
+  // --- quiet familiarity (never shown as numbers; only ever read, never displayed) ---
+  locationVisits:{cliff:0, dock:0, beach:0, lighthouse:0, village:0, chapel:0, shop:0, shed:0},
+  locationLastContext:{}, // locId -> {weather, season, period, dateKey}
+  benchSits:0,
+  railingStops:0,
+  cushionLeft:false,
+  mugLeft:false,
+  flowerLeft:null, // {dateKey, tended:false}
+  flowerTendedCount:0,
+  arrivalPeriods:{night:0, dawn:0, morning:0, afternoon:0, dusk:0, evening:0},
+  haleTeaNoted:false,
+  wrenRanOverCount:0
 });
 
 function migrateState(s){
@@ -529,12 +762,30 @@ function migrateState(s){
   if(!Array.isArray(s.daysVisited)) s.daysVisited = [];
   if(typeof s.gaveWrenShellCount !== 'number') s.gaveWrenShellCount = 0;
   if(typeof s.visitCount !== 'number') s.visitCount = 0;
+  s.locationVisits = Object.assign({}, d.locationVisits, s.locationVisits||{});
+  s.locationLastContext = s.locationLastContext || {};
+  if(typeof s.benchSits !== 'number') s.benchSits = 0;
+  if(typeof s.railingStops !== 'number') s.railingStops = 0;
+  if(typeof s.cushionLeft !== 'boolean') s.cushionLeft = false;
+  if(typeof s.mugLeft !== 'boolean') s.mugLeft = false;
+  if(s.flowerLeft===undefined) s.flowerLeft = null;
+  if(typeof s.flowerTendedCount !== 'number') s.flowerTendedCount = 0;
+  s.arrivalPeriods = Object.assign({}, d.arrivalPeriods, s.arrivalPeriods||{});
+  if(typeof s.haleTeaNoted !== 'boolean') s.haleTeaNoted = false;
+  if(typeof s.wrenRanOverCount !== 'number') s.wrenRanOverCount = 0;
   return s;
 }
 
 async function loadState(){
   const raw = await storeGet('saltmere_state', false);
-  STATE = raw ? migrateState(JSON.parse(raw)) : DEFAULT_STATE();
+  if(!raw){ STATE = DEFAULT_STATE(); return; }
+  try{
+    STATE = migrateState(JSON.parse(raw));
+  }catch(e){
+    console.error('[Saltmere:storage] Saved data was present but could not be parsed (' + e.message + '). Starting a fresh state rather than crashing. The corrupted raw value is logged below for recovery if needed.');
+    console.error('[Saltmere:storage] corrupted raw value:', raw);
+    STATE = DEFAULT_STATE();
+  }
 }
 async function saveState(){
   await storeSet('saltmere_state', JSON.stringify(STATE), false);
@@ -552,6 +803,30 @@ function tierFor(count){
   if(count>=4) return 'familiar';
   return 'new';
 }
+
+function daysSinceFirstVisit(ctx){
+  if(!STATE.firstVisit) return 0;
+  return daysBetweenKeys(todayKey(new Date(STATE.firstVisit)), todayKey(ctx.d));
+}
+
+function dominantArrivalPeriod(){
+  const total = Object.values(STATE.arrivalPeriods).reduce((a,b)=>a+b,0);
+  if(total<8) return null;
+  let best=null, bestCount=0;
+  Object.keys(STATE.arrivalPeriods).forEach(p=>{
+    if(STATE.arrivalPeriods[p]>bestCount){ best=p; bestCount=STATE.arrivalPeriods[p]; }
+  });
+  if(bestCount/total >= 0.5) return best;
+  return null;
+}
+const ARRIVAL_PATTERN_PHRASE = {
+  dawn:"just as it's getting light",
+  morning:"first thing in the morning",
+  afternoon:"in the middle of the afternoon",
+  dusk:"just before sunset",
+  evening:"after dark",
+  night:"in the dead of night"
+};
 
 // Anti-repeat picker for ambient detail pools — avoids showing the exact
 // same observation twice in a row at the same spot. Session-only; not persisted.
@@ -672,7 +947,8 @@ const PAIR_VIGNETTES = {
   ],
   'hale,mira': [
     "Mira's in the doorway with a loaf under one arm, Hale mid-sentence about something that doesn't sound like it's really about bread.",
-    "Hale's telling a story about a gull he's decided was a sign of something. Mira's expression suggests she's heard this exact story before and is choosing patience."
+    "Hale's telling a story about a gull he's decided was a sign of something. Mira's expression suggests she's heard this exact story before and is choosing patience.",
+    "Hale's carrying something heavy up toward the light for her, without being asked and without either of them making a thing of it."
   ],
   'mira,tobin': [
     "Mira and Tobin are standing a little apart, not quite talking, both watching the water like it might do something.",
@@ -750,7 +1026,8 @@ const NPCS = {
       let lines = [
         `Tide's ${ctx.tide.label} right now. Best fishing's an hour either side of the turn, if you ever fancy trying your luck.`,
         "Lost a good hook to something big last week. Tell myself it was a conger. Tell myself a lot of things, these days.",
-        "Funny thing about low tide — turns up all sorts you'd never see otherwise. Found a button once. Half a boot, another time."
+        "Funny thing about low tide — turns up all sorts you'd never see otherwise. Found a button once. Half a boot, another time.",
+        "Time and tide, as they say. Doesn't much matter what you had planned."
       ];
       if(tier!=='new'){
         lines = lines.concat([
@@ -795,6 +1072,9 @@ const NPCS = {
       const haleCond = npcCondition('hale', ctx.d);
       if(haleCond && haleCond.name==='a cold') lines.push(haleCond.recovering ? "Hale's getting over that cold, finally. Still sounds like a foghorn, but a recovering one." : "Hale's got a proper cold. Voice like a rusted gate. Won't close the shop over it, obviously.");
       if(isBirthdayToday('tobin', ctx.d)) lines.push("It's my birthday, since you ask. No, I'm not telling you the number. No, I don't want a fuss. Hale will make one regardless.");
+      if((ctx.weather==='clear'||ctx.weather==='hazy') && seededFor(todayKey(ctx.d),'tobin','gulllore')<0.15){
+        lines.push("Hale swears the gulls sitting on the chimneys instead of wheeling means weather's about to turn. I've watched them sit there a full week with nothing happening. Still catch myself checking, though.");
+      }
       return lines;
     }
   },
@@ -869,6 +1149,18 @@ const NPCS = {
       const wrenCond = npcCondition('wren', ctx.d);
       if(wrenCond) lines.push("Wren's got a scraped knee from some adventure or other. Wore it like a medal when she showed me.");
       if(isBirthdayToday('mira', ctx.d)) lines.push("It's my birthday today, as it happens. Another year. Not that I'm advertising which one. The light doesn't know the difference, which I find restful.");
+      if(tierFor(state.talk.mira)==='trusted' && tierFor(state.talk.tobin)==='trusted' && daysSinceFirstVisit(ctx)>=21 && seededFor(todayKey(ctx.d),'mira','thaw')<0.2){
+        lines.push("I finally said something to Tobin about the wreck. Just — that he could talk about it, if he still wanted to. He didn't say much back. Didn't need to, really.");
+      }
+      if((ctx.weather==='clear'||ctx.weather==='hazy') && seededFor(todayKey(ctx.d),'mira','benchlore')<0.12){
+        lines.push("People keep asking me about that bench up here like I'm supposed to know its history. Far as I know it was already there when I got the light. Older than me, probably.");
+      }
+      const lastHere = STATE.locationLastContext && STATE.locationLastContext.lighthouse;
+      if(lastHere && lastHere.weather==='foggy' && ctx.weather!=='foggy' && seededFor(todayKey(ctx.d),'mira','memory')<0.3){
+        lines.push("Last time you were up here you could barely see the water for fog. Easy to forget how different the same place can look.");
+      } else if(lastHere && lastHere.period==='night' && !isNightish(ctx.period) && seededFor(todayKey(ctx.d),'mira','memory2')<0.3){
+        lines.push("Funny seeing you up here in daylight. You're usually a night visitor, in my experience of you.");
+      }
       return lines;
     }
   },
@@ -901,6 +1193,10 @@ const NPCS = {
     first:"Are you lost? Everyone who comes down here is either lost or fishing, and you don't look like you're fishing. I'm Wren. I found a crab claw bigger than my hand once — I lost it, but it was THIS big.",
     asleepLine:null,
     pool(state, ctx){
+      if(!state.flags.nicknameKnown && tierFor(state.talk.tobin)==='trusted' && seededFor(todayKey(ctx.d),'wren','nickname')<0.3){
+        state.flags.nicknameKnown = true; // persisted by talkTo()'s saveState() immediately after this returns
+        return ["Tobin calls you \u201cthe regular\u201d now, when he thinks I'm not listening. I don't think that's a real nickname but I like it."];
+      }
       const tier = tierFor(state.talk.wren);
       let lines = [
         "I'm building a sand wall to stop the tide. It isn't working yet but I have a new theory.",
@@ -917,6 +1213,7 @@ const NPCS = {
       }
       if(tier==='trusted'){
         lines.push("Sometimes I think the grown-ups are all sad about the same thing and just don't say so. I don't ask. I just bring more pebbles.");
+        lines.push("Found a stripy pebble yesterday and thought of you before I even decided whether to keep it. Annoying, honestly.");
       }
       if(tier!=='new'){
         lines = lines.concat([
@@ -941,6 +1238,12 @@ const NPCS = {
       const tobinCond = npcCondition('tobin', ctx.d);
       if(tobinCond && tobinCond.name==='a sore back') lines.push("Tobin's walking funny. Back trouble, he says. I offered him one of my pebbles to feel better. He kept it.");
       if(isBirthdayToday('wren', ctx.d)) lines.push(`I'm ${ageOf('wren', ctx.d)} today! Tobin gave me a boat he's been working on for AGES. I'm not telling you what Hale gave me because it's embarrassing how much I like it.`);
+      if((ctx.weather==='clear'||ctx.weather==='hazy') && seededFor(todayKey(ctx.d),'wren','gulllore')<0.15){
+        lines.push("Mr. Hale says when the gulls sit on the roofs instead of flying it means weather's coming. I check every morning now. It's usually right, or he just says that after and I don't notice.");
+      }
+      if(tier!=='new' && seededFor(todayKey(ctx.d),'wren','inherited')<0.15){
+        lines.push("I caught myself saying \u201ctime and tide\u201d to Mr. Hale yesterday, like Tobin does about everything. Hale just looked at me. I don't even know what it means.");
+      }
       return lines;
     }
   },
@@ -954,6 +1257,9 @@ const NPCS = {
         return cond.recovering
           ? "still a bit hoarse, but back to his usual pace behind the counter"
           : "sniffling behind the counter, voice gone rough, refusing point-blank to call it a day";
+      }
+      if(tierFor(STATE.talk.hale)==='trusted' && (ctx.period==='afternoon'||ctx.period==='dusk') && seededFor(todayKey(ctx.d),'hale','tea')<0.4){
+        return "already setting out a second cup before you've said a word, still mid-sentence with himself about the delivery";
       }
       const pool = [
         "totting up the ledger with the stub of a pencil",
@@ -1011,6 +1317,18 @@ const NPCS = {
       if(miraCond && miraCond.name==='short on sleep') lines.push("Mira's not sleeping well this week. I've been leaving an extra loaf, not that she'd ever say it helps.");
       if(state.visitCount>=30) lines.push("\u201cThe usual?\u201d Hale asks, not even looking up anymore. There isn't really a \u201cusual.\u201d That's not really the point anymore either.");
       if(isBirthdayToday('hale', ctx.d)) lines.push("It's my birthday, for what that's worth at my age. Tobin will pretend he forgot, then produce something he's clearly had ready for a week.");
+      const arrivalPattern = dominantArrivalPeriod();
+      if(arrivalPattern && seededFor(todayKey(ctx.d),'hale','arrivalnote')<0.3) lines.push(`You always seem to turn up ${ARRIVAL_PATTERN_PHRASE[arrivalPattern]}. Not a complaint. Just noticed it.`);
+      if(tierFor(state.talk.hale)!=='new' && ctx.weather==='clear' && seededFor(todayKey(ctx.d),'hale','gulls')<0.25) lines.push("Haven't heard the gulls this loud in a while. Means something, probably. Never bothered finding out what.");
+      if((ctx.weather==='clear'||ctx.weather==='hazy') && seededFor(todayKey(ctx.d),'hale','gulllore')<0.15){
+        lines.push("Gulls were all sat on the chimneys this morning, not a one of them wheeling. Weather's turning, mark it. Always has, in my experience, whatever Tobin says about it.");
+      }
+      if(seededFor(todayKey(ctx.d),'hale','benchlore')<0.12){
+        lines.push("That bench up at the light was old Pel's, they say — before my time, even. Mira gets cagey when you ask her about it. Always has.");
+      }
+      if(state.flags.nicknameKnown && seededFor(todayKey(ctx.d),'hale','nickname')<0.2){
+        lines.push("Tobin's started calling you \u201cthe regular.\u201d It's spreading, whether you like it or not.");
+      }
       return lines;
     }
   }
@@ -1253,13 +1571,17 @@ function crateFG(x,y,scale,repaired){
   if(repaired) s += `<rect x="${x-w/2}" y="${y-h*0.55}" width="${w}" height="${3*scale}" fill="#5e4f3c" opacity="0.9"/>`;
   return s;
 }
-function benchFG(x,y,scale){
-  return `<g fill="${FG}"><rect x="${x-18*scale}" y="${y-7*scale}" width="${36*scale}" height="${3.5*scale}"/>
+function benchFG(x,y,scale,cushion){
+  let s = `<g fill="${FG}"><rect x="${x-18*scale}" y="${y-7*scale}" width="${36*scale}" height="${3.5*scale}"/>
   <rect x="${x-16*scale}" y="${y-3.5*scale}" width="${3*scale}" height="${9*scale}"/>
   <rect x="${x+13*scale}" y="${y-3.5*scale}" width="${3*scale}" height="${9*scale}"/>
   <rect x="${x-18*scale}" y="${y-16*scale}" width="${3*scale}" height="${9.5*scale}"/>
   <rect x="${x+15*scale}" y="${y-16*scale}" width="${3*scale}" height="${9.5*scale}"/>
   <rect x="${x-18*scale}" y="${y-18*scale}" width="${36*scale}" height="${2.8*scale}"/></g>`;
+  if(cushion){
+    s += `<rect x="${x-9*scale}" y="${y-10.5*scale}" width="${18*scale}" height="${4*scale}" rx="${1.5*scale}" fill="#a8503a" opacity="0.85"/>`;
+  }
+  return s;
 }
 function bucketFG(x,y,scale){
   return `<path d="M ${x-5.5*scale} ${y-12*scale} L ${x+5.5*scale} ${y-12*scale} L ${x+4.5*scale} ${y} L ${x-4.5*scale} ${y} Z" fill="${FG}"/>
@@ -1366,6 +1688,9 @@ function buildScene(locId, ctx){
     for(let i=0;i<6;i++){ s += `<line x1="0" y1="${188+i*2.2}" x2="400" y2="${188+i*2.2}" stroke="${FG2}" stroke-width="1" opacity="0.5"/>`; }
     s += mooringPostFG(55, 200, 1.3, true);
     s += gullPerchedFG(55, 178, 0.8);
+    if(ctx.state.mugLeft){
+      s += `<path d="M 78 196 L 86 196 L 85 188 L 79 188 Z" fill="${FG}"/><path d="M 86 190 Q 90 190 89 193 Q 88 195 86 194" stroke="${FG}" stroke-width="1.2" fill="none"/>`;
+    }
     s += barrelFG(330, 199, 1.1);
     s += bucketFG(360, 198, 1.0);
     if(weather==='rain'||weather==='foggy') s += puddleFG(220, 196, 26, 6, pal.sky[1]);
@@ -1421,7 +1746,7 @@ function buildScene(locId, ctx){
     // --- foreground ---
     s += fenceRunFG(-5, 199, 130, 16, 0.85, null);
     s += fenceRunFG(290, 199, 115, 16, 0.85, null);
-    s += benchFG(70, 198, 1.05);
+    s += benchFG(70, 198, 1.05, ctx.state.cushionLeft);
     s += grassTufts(170, 199, 7, 0.9, FG);
     s += grassTufts(300, 199, 8, 0.9, FG);
     if(weather==='rain'||weather==='foggy') s += puddleFG(110, 197, 12, 3.5, pal.sky[1]);
@@ -1546,8 +1871,13 @@ function baseDescription(locId, ctx){
       return `The dock creaks under the day's traffic, real or imagined. ${tp.charAt(0).toUpperCase()+tp.slice(1)}. The smell of tar and old rope sits over everything.`;
     case 'beach':
       return `The flats stretch out, scattered with the ordinary wreckage of a coastline. ${tp.charAt(0).toUpperCase()+tp.slice(1)}, and ${wp}.`;
-    case 'lighthouse':
+    case 'lighthouse': {
+      const familiarWithMira = tierFor(ctx.state.talk.mira)==='trusted';
+      if(familiarWithMira && !isNightish(period) && seededFor(todayKey(ctx.d),'lighthouse','expects')<0.35){
+        return `The lighthouse door sits unlatched, the way it has been more often than not lately — not an invitation exactly, just a door nobody felt the need to lock against you. ${isNightish(period)?'Its lamp turns steadily overhead, throwing a slow gold arm across the water.':'The lamp sits dark and patient, waiting its turn.'}`;
+      }
       return `The tower stands the way it always has, indifferent and exact. ${isNightish(period)?'Its lamp turns steadily overhead, throwing a slow gold arm across the water.':'The lamp sits dark and patient, waiting its turn.'}`;
+    }
     case 'village':
       if(df.isSunday){
         return `Quiet, even for Saltmere. Hale's shutters stay closed on Sundays — a private custom nobody's ever explained, and nobody's ever asked about twice. ${wp.charAt(0).toUpperCase()+wp.slice(1)}.`;
@@ -1683,11 +2013,24 @@ function renderHotspots(){
         : "Both traps sit half-submerged, quiet for now. Whatever's down there isn't telling.");
       pushLog('Checked the crab traps.');
     });
-    add('Watch the water', ()=>{
+    add('Watch the water', async ()=>{
       const here = npcsAtLocation('dock', ctx.period, ctx.d);
       if(here.length>=2){
         setNarrative(pairVignette(here));
         pushLog('Watched the dock for a while.');
+        return;
+      }
+      STATE.railingStops = (STATE.railingStops||0) + 1;
+      let justEarned = false;
+      if(STATE.railingStops===7 && !STATE.mugLeft){
+        STATE.mugLeft = true;
+        justEarned = true;
+      }
+      await saveState();
+      if(justEarned){
+        setNarrative("You lean on the railing where you always seem to end up. There's a mug sitting on the post next to you that you're fairly sure isn't yours — weathered, chipped on one side. Nobody comes to claim it.");
+        pushLog('Found a mug left by the railing.');
+        renderSceneArt();
         return;
       }
       const pool = [
@@ -1696,6 +2039,7 @@ function renderHotspots(){
         "Rope, salt, and the particular quiet of a working place between one job and the next.",
         "A single boot dries upside down on a post — presumably half of the pair Hale mentioned on the notice board."
       ];
+      if(STATE.mugLeft) pool.push("The mug's still there on the post. Someone must top it up occasionally — it's never quite empty, never quite full either.");
       if(ctx.tide.label==='low') pool.push("The old pilings show right down to the waterline, green and slick.");
       if(ctx.tide.label==='high') pool.push("Waves slap up between the boards, close enough to catch a boot if you're not careful.");
       if(ctx.weather==='rain') pool.push("Rain drums on the shed roof in a way that makes the whole dock sound hollow.");
@@ -1728,11 +2072,20 @@ function renderHotspots(){
     }
   }
   if(CURRENT_LOC==='beach'){
-    add('Look in the tide pools', ()=>{
+    add('Look in the tide pools', async ()=>{
       const here = npcsAtLocation('beach', ctx.period, ctx.d);
       if(here.length>=2){
         setNarrative(pairVignette(here));
         pushLog('Watched the flats for a while.');
+        return;
+      }
+      if(here.length===1 && here[0]==='wren' && tierFor(STATE.talk.wren)!=='new' && seededFor(todayKey(ctx.d),ctx.period,'wrenrun')<0.22){
+        STATE.wrenRanOverCount = (STATE.wrenRanOverCount||0)+1;
+        await saveState();
+        const finds = ["a perfectly round pebble","a crab shell, empty and intact","something she insists is a shark's tooth and is almost certainly not","a twist of green sea glass"];
+        const find = pickFrom('wren_runfind', finds);
+        setNarrative(`Wren spots you and comes sprinting over, breathless, holding out ${find} like it's urgent news. She doesn't wait for you to finish looking at it before she's off again, already on to the next thing.`);
+        pushLog('Wren ran over to show you something, then ran off again.');
         return;
       }
       const pool = [
@@ -1839,6 +2192,34 @@ function renderHotspots(){
     });
     add("Open Mira's logbook", ()=> openLogbook());
     add('Open the visitors\u2019 logbook', ()=> openGuestbook());
+    add('Sit on the bench for a while', async ()=>{
+      STATE.benchSits = (STATE.benchSits||0) + 1;
+      let justEarned = false;
+      if(STATE.benchSits===6 && !STATE.cushionLeft){
+        STATE.cushionLeft = true;
+        justEarned = true;
+      }
+      await saveState();
+      if(justEarned){
+        setNarrative("You sit a while, same as you tend to. At some point you notice a cushion's appeared on the bench — faded, clearly someone's spare, never mentioned by anyone, just quietly there now.");
+      } else if(STATE.cushionLeft){
+        const pool = [
+          "The cushion's a little damp from yesterday's weather, but it's there, same as it's been for a while now.",
+          "You sit where you usually do. It doesn't feel like a view anymore so much as a place.",
+          "The water does what it does. You've stopped needing it to be remarkable to be worth watching."
+        ];
+        setNarrative(pickFrom('bench_sit_settled', pool));
+      } else {
+        const pool = [
+          "You sit and watch the water for a while. Nothing happens. That's rather the point.",
+          "The bench is cold through your coat. Worth it anyway.",
+          "Gulls work the wind off the point. You could watch this for longer than you mean to."
+        ];
+        setNarrative(pickFrom('bench_sit', pool));
+      }
+      pushLog('Sat on the bench for a while.');
+      renderSceneArt();
+    });
     if(!STATE.chores.miraOil){
       add('Top up the lamp oil', async ()=>{
         STATE.chores.miraOil = true;
@@ -2024,18 +2405,33 @@ function cliffAmbientPool(ctx){
   if(ctx.tide.label==='high') pool.push("The water's right up at the foot of the cliff, slapping at rocks it doesn't usually reach.");
   if(STATE.flags.unlockedChapel) pool.push("From up here you can just make out the chapel roof, dark with damp, indistinguishable from any other roof unless you already know what it is.");
   if(STATE.flags.returnedCat) pool.push("Something orange suns itself on a flat rock partway down the path. You're fairly sure that's Biscuit's doing, not yours.");
+  const cliffVisits = (STATE.locationVisits && STATE.locationVisits.cliff) || 0;
+  if(cliffVisits>=20){
+    if(ctx.season==='spring') pool.push("You notice the gorse is a shade further along than it was — the kind of thing you'd never catch if you didn't come up here so often.");
+    if(ctx.season==='autumn') pool.push("The grass has gone that particular brittle gold it does right before the swallows leave. You know this slope well enough now to clock it.");
+    if(ctx.season==='winter') pool.push("You can tell exactly how hard the frost's bitten just by which patches of grass are still bent over from yesterday.");
+  }
   return pool;
 }
 
 function doLookOverCove(ctx){
-  const boatOut = npcAt('tobin', ctx.period, ctx.d).present && npcAt('tobin', ctx.period, ctx.d).locationId==='dock';
+  const tobinHere = npcAt('tobin', ctx.period, ctx.d).present && npcAt('tobin', ctx.period, ctx.d).locationId==='dock';
   const parts = [];
-  parts.push(boatOut ? "A small boat works the water below — someone's out early, or late, depending how you look at it." : "The water below sits empty of boats just now.");
+  if(tobinHere && tierFor(STATE.talk.tobin)!=='new'){
+    parts.push("Tobin lifts a hand without looking up — a wave, mid-knot, gone again before you've even waved back.");
+  } else {
+    parts.push(tobinHere ? "A small boat works the water below — someone's out early, or late, depending how you look at it." : "The water below sits empty of boats just now.");
+  }
   parts.push(isNightish(ctx.period) ? "Across the point, the lighthouse turns its slow gold arm over everything, including you, for one indifferent second at a time." : "The lighthouse stands quiet in daylight, saving its one trick for later.");
   parts.push(pickFrom('cliff_amb', cliffAmbientPool(ctx)));
   if(STATE.visitCount>=15) parts.push("You've started to recognise which gull is which, which is a ridiculous thing to be quietly proud of.");
   setNarrative(parts.join(' '));
   pushLog('Looked out over the cove.');
+}
+
+function daysBetweenKeys(k1, k2){
+  const d1 = new Date(k1+'T00:00:00'), d2 = new Date(k2+'T00:00:00');
+  return Math.round((d2-d1)/86400000);
 }
 
 async function doSignpost(ctx){
@@ -2045,7 +2441,27 @@ async function doSignpost(ctx){
   if(ctx.dayFlags.isThursday){
     html += `<br><br>Someone's left a small bundle of flowers at the foot of the post — ${ctx.season==='winter'?'a sprig of holly, berries and all':ctx.season==='spring'?'wild primrose, still damp':ctx.season==='summer'?'sea lavender, tied with twine':'a handful of late marigolds'}. There's never a note. There's never anyone to ask. It happens most Thursdays, as far as you can tell, and has for longer than that.`;
   }
+
+  // the player's own flowers, if any are currently there
+  let flowerHtml = '';
+  if(STATE.flowerLeft){
+    const days = daysBetweenKeys(STATE.flowerLeft.dateKey, todayKey(ctx.d));
+    if(days<=0){
+      flowerHtml = `<br><br>The flowers you left earlier are still right where you put them.`;
+    } else if(days<=3){
+      flowerHtml = `<br><br>The flowers you left a few days back are still there, a little more wilted each time.`;
+    } else {
+      flowerHtml = `<br><br>The flowers you left are gone now — not scattered, not dead and ignored, just quietly tidied away at some point. Someone noticed them. Nobody's said anything about it.`;
+      STATE.flowerLeft = null;
+      STATE.flowerTendedCount = (STATE.flowerTendedCount||0)+1;
+      saveState();
+    }
+  }
+  html += flowerHtml;
   html += count>0 ? `<br><br>${count} traveller${count===1?'':'s'} before you left their mark here too.` : `<br><br>No one's carved anything recent. Yours could be the first in a while.`;
+  if(!STATE.flowerLeft){
+    html += `<div style="margin-top:8px"><button id="flower-btn" class="sign-btn" style="font-size:0.78rem;padding:6px 12px;">Leave flowers here</button></div>`;
+  }
   html += `<div class="inline-form"><input type="text" id="carve-input" maxlength="4" placeholder="your initials"><button id="carve-btn">Carve</button></div>`;
   setNarrative(html);
   pushLog('Read the old signpost.');
@@ -2057,6 +2473,13 @@ async function doSignpost(ctx){
     await storeSet(`carving:${Date.now()}-${Math.random().toString(36).slice(2,6)}`, clean, true);
     setNarrative(`You scratch <strong>${clean}</strong> into the post, low down where it'll weather slow. Someone else might stand here someday and wonder who you were.`);
     pushLog(`Carved "${clean}" into the signpost.`, 'mark left');
+  });
+  const flowerBtn = document.getElementById('flower-btn');
+  if(flowerBtn) flowerBtn.addEventListener('click', async ()=>{
+    STATE.flowerLeft = {dateKey: todayKey(ctx.d)};
+    await saveState();
+    setNarrative("You leave a small handful of flowers at the foot of the post, the way Saltmere itself seems to, here and there, for no reason it's ever explained. No note. Doesn't feel like it needs one.");
+    pushLog('Left flowers at the signpost.', 'kindness');
   });
 }
 
@@ -2167,14 +2590,45 @@ function escapeHtml(s){
 /* ============================================================
    LOCATION NAVIGATION
    ============================================================ */
+function recordLocationVisit(locId, ctx){
+  const key = INTERIOR_PARENT[locId] || locId;
+  const prev = STATE.locationLastContext[key] || null;
+  STATE.locationVisits[key] = (STATE.locationVisits[key]||0) + 1;
+  STATE.locationLastContext[key] = {weather:ctx.weather, season:ctx.season, period:ctx.period, dateKey:todayKey(ctx.d)};
+  saveState();
+  return prev;
+}
+
+// A quiet, occasional callback to the last time the player stood somewhere.
+// Only fires sometimes (never every visit — that would feel mechanical) and
+// only when there's something worth noticing different or echoed.
+function placeEcho(locId, prev, ctx){
+  if(!prev) return null;
+  if(prev.dateKey === todayKey(ctx.d)) return null; // same day, not a "last time"
+  if(seededFor(todayKey(ctx.d), locId, 'echo') > 0.4) return null;
+  if(prev.weather==='rain' && ctx.weather!=='rain') return "It rained the last time you stood here.";
+  if(prev.weather==='foggy' && ctx.weather!=='foggy') return "Last time you were here, you could barely see past the rail for fog.";
+  if(prev.season !== ctx.season){
+    if(prev.season==='winter' && ctx.season!=='winter') return "Hard to believe this was frozen solid not so long ago.";
+    if(prev.season==='summer' && ctx.season==='autumn') return "Feels different from the last time you stood here, height of summer.";
+    return null;
+  }
+  if(prev.period==='night' && !isNightish(ctx.period)) return "Strange seeing this place in daylight — last time you were here it was dark.";
+  return null;
+}
+
 function goTo(locId, opts){
   CURRENT_LOC = locId;
   const ctx = nowCtx();
+  const prevContext = recordLocationVisit(locId, ctx);
   document.getElementById('loc-title').textContent = LOCATIONS[locId].name;
   document.getElementById('location-badge').textContent = LOCATIONS[locId].name;
   renderSceneArt();
   if(!opts || !opts.skipNarrative){
-    setNarrative(baseDescription(locId, ctx));
+    let desc = baseDescription(locId, ctx);
+    const echo = placeEcho(locId, prevContext, ctx);
+    if(echo) desc += ` ${echo}`;
+    setNarrative(desc);
   }
   renderHotspots();
   renderSignpost();
@@ -2267,6 +2721,7 @@ async function enterWorld(){
   if(!STATE.firstVisit) STATE.firstVisit = ctx.d.toISOString();
   const tk = todayKey(ctx.d);
   if(!STATE.daysVisited.includes(tk)) STATE.daysVisited.push(tk);
+  STATE.arrivalPeriods[ctx.period] = (STATE.arrivalPeriods[ctx.period]||0) + 1;
   await saveState();
 
   document.getElementById('intro-screen').classList.add('hidden');
@@ -2309,6 +2764,11 @@ document.getElementById('drawer-toggle').addEventListener('click', ()=>{
   document.getElementById('drawer').classList.toggle('open');
 });
 
+StorageManager.whenReady().then(()=>{
+  if(StorageManager.degraded){
+    document.getElementById('storage-warning').classList.remove('hidden');
+  }
+});
 })();
 
 if ('serviceWorker' in navigator) {
